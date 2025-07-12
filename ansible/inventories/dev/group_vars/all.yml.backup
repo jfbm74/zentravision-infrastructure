@@ -9,8 +9,8 @@ app_repo_url: "https://github.com/jfbm74/zentravision.git"
 app_version: develop  # Usar rama develop para dev
 
 # Domain configuration
-domain_name: "{{ vault_domain_name | default('dev-zentravision.ejemplo.com') }}"
-admin_email: "{{ vault_admin_email | default('admin@ejemplo.com') }}"
+domain_name: "{{ vault_domain_name | default('dev-zentravision.zentratek.com') }}"
+admin_email: "{{ vault_admin_email | default('consultoria@zentratek.com') }}"
 
 # Django settings
 django_create_superuser: true
