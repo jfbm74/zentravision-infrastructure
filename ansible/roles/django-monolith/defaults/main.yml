@@ -1,0 +1,36 @@
+---
+# Default variables for django-monolith role
+app_user: zentravision
+app_home: /opt/zentravision
+app_name: zentravision
+
+# Python settings
+python_version: "3.10"
+
+# Gunicorn settings
+gunicorn_workers: 2
+gunicorn_timeout: 120
+gunicorn_max_requests: 500
+
+# Celery settings
+celery_worker_concurrency: 1
+celery_max_memory: 100000
+celery_time_limit: 180
+celery_soft_time_limit: 150
+
+# SSL settings
+ssl_enabled: true
+ssl_provider: letsencrypt
+
+# Backup settings
+backup_enabled: true
+backup_hour: 2
+backup_minute: 0
+
+# Security settings
+firewall_enabled: true
+fail2ban_enabled: true
+
+# Logging
+log_level: INFO
+log_retention_days: 14

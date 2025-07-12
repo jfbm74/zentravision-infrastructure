@@ -1,0 +1,93 @@
+---
+- name: Deploy/Update Zentravision Application
+  hosts: zentravision
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Create backup before deployment
+      command: /opt/zentravision/backup-db.sh
+      become_user: zentravision
+      tags: ['backup']
+
+    - name: Pull latest application code
+      git:
+        repo: "{{ app_repo_url }}"
+        dest: "{{ app_home }}/app"
+        version: "{{ app_version }}"
+        force: yes
+      become_user: zentravision
+      notify:
+        - restart zentravision
+        - restart celery
+      tags: ['deploy']
+
+    - name: Install/update Python dependencies
+      pip:
+        requirements: "{{ app_home }}/app/requirements.txt"
+        virtualenv: "{{ app_home }}/venv"
+        state: present
+      become_user: zentravision
+      notify:
+        - restart zentravision
+        - restart celery
+      tags: ['deploy']
+
+    - name: Run database migrations
+      django_manage:
+        command: migrate
+        app_path: "{{ app_home }}/app"
+        virtualenv: "{{ app_home }}/venv"
+        settings: zentravision.settings
+      become_user: zentravision
+      environment:
+        DJANGO_SETTINGS_MODULE: zentravision.settings
+      tags: ['deploy']
+
+    - name: Collect static files
+      django_manage:
+        command: collectstatic
+        app_path: "{{ app_home }}/app"
+        virtualenv: "{{ app_home }}/venv"
+        settings: zentravision.settings
+      become_user: zentravision
+      environment:
+        DJANGO_SETTINGS_MODULE: zentravision.settings
+      tags: ['deploy']
+
+    - name: Restart services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - zentravision
+        - zentravision-celery
+      tags: ['deploy']
+
+    - name: Wait for application to start
+      wait_for:
+        port: 8000
+        host: localhost
+        delay: 10
+        timeout: 60
+      tags: ['deploy']
+
+    - name: Verify application health
+      uri:
+        url: "http://localhost:8000/health/"
+        method: GET
+        status_code: 200
+      retries: 3
+      delay: 5
+      tags: ['verify']
+
+  handlers:
+    - name: restart zentravision
+      systemd:
+        name: zentravision
+        state: restarted
+
+    - name: restart celery
+      systemd:
+        name: zentravision-celery
+        state: restarted
