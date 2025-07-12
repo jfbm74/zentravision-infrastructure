@@ -18,7 +18,7 @@ echo "✅ IP obtenida: $INSTANCE_IP"
 # Crear directorio si no existe
 mkdir -p ../../../ansible/inventories/dev
 
-# Generar inventario para DEV dinámicamente
+# Generar inventario para DEV dinámicamente - USING app_environment instead of environment
 cat > ../../../ansible/inventories/dev/hosts.yml << EOFDEV
 ---
 zentravision:
@@ -31,7 +31,7 @@ zentravision:
 
   vars:
     gcp_project_id: zentraflow
-    environment: dev
+    app_environment: dev
     domain_name: "dev-zentravision.zentratek.com"
     admin_email: "consultoria@zentratek.com"
     app_repo_url: "https://github.com/jfbm74/zentravision.git"

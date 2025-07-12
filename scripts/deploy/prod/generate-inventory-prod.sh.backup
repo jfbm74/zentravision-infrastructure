@@ -36,7 +36,7 @@ zentravision:
 
   vars:
     gcp_project_id: zentraflow
-    app_environment: prod
+    environment: prod
     domain_name: "$DOMAIN_NAME"
     admin_email: "$ADMIN_EMAIL"
     app_repo_url: "https://github.com/jfbm74/zentravision.git"
