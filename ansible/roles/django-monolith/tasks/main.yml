@@ -207,6 +207,27 @@
     DATABASE_URL: "postgresql://{{ app_user }}:{{ vault_db_password | default('ZentravisionUAT2024!') }}@localhost:5432/{{ app_name }}"
   ignore_errors: yes
 
+# Create Django superuser
+- name: Create Django superuser
+  django_manage:
+    command: "createsuperuser --noinput"
+    app_path: "{{ app_home }}/app"
+    virtualenv: "{{ app_home }}/venv"
+  environment:
+    DJANGO_SUPERUSER_USERNAME: "{{ django_superuser_username }}"
+    DJANGO_SUPERUSER_EMAIL: "{{ django_superuser_email }}"
+    DJANGO_SUPERUSER_PASSWORD: "{{ django_superuser_password }}"
+    DATABASE_URL: "postgresql://{{ app_user }}:{{ vault_db_password | default('ZentravisionUAT2024!') }}@localhost:5432/{{ app_name }}"
+  become_user: "{{ app_user }}"
+  when: django_create_superuser | default(false)
+  ignore_errors: yes
+  register: superuser_result
+
+- name: Show superuser creation result
+  debug:
+    var: superuser_result
+  when: django_create_superuser | default(false)
+
 # Gunicorn service
 - name: Create Gunicorn service file
   template:
@@ -246,4 +267,127 @@
   loop:
     - "{{ app_name }}"
     - nginx
+  ignore_errors: yes
+
+
+
+# Django operations (con mejor manejo de errores y collectstatic)
+- name: Run Django migrations
+  django_manage:
+    command: migrate
+    app_path: "{{ app_home }}/app"
+    virtualenv: "{{ app_home }}/venv"
+  become_user: "{{ app_user }}"
+  environment:
+    DATABASE_URL: "postgresql://{{ app_user }}:{{ vault_db_password | default('ZentravisionUAT2024!') }}@localhost:5432/{{ app_name }}"
+  ignore_errors: yes
+  register: migrate_result
+
+- name: Show migration output if failed
+  debug:
+    var: migrate_result
+  when: migrate_result.failed | default(false)
+
+# Collect static files - CRITICAL for fixing 404 errors on admin
+- name: Collect Django static files
+  django_manage:
+    command: collectstatic
+    app_path: "{{ app_home }}/app"
+    virtualenv: "{{ app_home }}/venv"
+  become_user: "{{ app_user }}"
+  environment:
+    DATABASE_URL: "postgresql://{{ app_user }}:{{ vault_db_password | default('ZentravisionUAT2024!') }}@localhost:5432/{{ app_name }}"
+  ignore_errors: yes
+  register: collectstatic_result
+
+- name: Show collectstatic result
+  debug:
+    msg: "Collectstatic completed: {{ collectstatic_result.out | default('No output') }}"
+
+# Ensure proper permissions on static files
+- name: Set proper permissions on static directory
+  file:
+    path: "{{ app_home }}/static"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+    recurse: yes
+  ignore_errors: yes
+
+# Create Django superuser if specified
+- name: Create Django superuser
+  django_manage:
+    command: "createsuperuser --noinput --username={{ django_superuser_username }} --email={{ django_superuser_email }}"
+    app_path: "{{ app_home }}/app"
+    virtualenv: "{{ app_home }}/venv"
+  become_user: "{{ app_user }}"
+  environment:
+    DATABASE_URL: "postgresql://{{ app_user }}:{{ vault_db_password | default('ZentravisionUAT2024!') }}@localhost:5432/{{ app_name }}"
+    DJANGO_SUPERUSER_PASSWORD: "{{ django_superuser_password }}"
+  when: django_create_superuser | default(false)
+  ignore_errors: yes  # Puede fallar si el usuario ya existe
+
+# Gunicorn service
+- name: Create Gunicorn service file
+  template:
+    src: gunicorn.service.j2
+    dest: "/etc/systemd/system/{{ app_name }}.service"
+  notify:
+    - reload systemd
+    - restart zentravision
+
+# Nginx configuration
+- name: Create Nginx site configuration
+  template:
+    src: nginx.conf.j2
+    dest: "/etc/nginx/sites-available/{{ app_name }}"
+  notify: restart nginx
+
+- name: Enable Nginx site
+  file:
+    src: "/etc/nginx/sites-available/{{ app_name }}"
+    dest: "/etc/nginx/sites-enabled/{{ app_name }}"
+    state: link
+  notify: restart nginx
+
+- name: Remove default Nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: restart nginx
+
+# Test Nginx configuration before starting
+- name: Test Nginx configuration
+  command: nginx -t
+  register: nginx_test
+  failed_when: nginx_test.rc != 0
+  changed_when: false
+
+# Start services
+- name: Start and enable application services
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  loop:
+    - "{{ app_name }}"
+    - nginx
+  ignore_errors: yes
+
+# Wait for services to be ready
+- name: Wait for Gunicorn to start
+  wait_for:
+    port: 8000
+    host: 127.0.0.1
+    delay: 5
+    timeout: 30
+
+- name: Verify application health
+  uri:
+    url: "http://127.0.0.1:8000/"
+    method: GET
+    status_code: [200, 404]  # 404 is OK if no root URL configured
+  retries: 3
+  delay: 5
   ignore_errors: yes

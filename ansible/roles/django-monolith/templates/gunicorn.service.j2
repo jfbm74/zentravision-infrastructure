@@ -6,10 +6,22 @@ After=network.target
 User={{ app_user }}
 Group={{ app_user }}
 WorkingDirectory={{ app_home }}/app
-ExecStart={{ app_home }}/venv/bin/gunicorn --workers {{ gunicorn_workers | default(2) }} --bind 127.0.0.1:8000 {{ app_name }}.wsgi:application
+ExecStart={{ app_home }}/venv/bin/gunicorn \
+    --workers {{ gunicorn_workers | default(2) }} \
+    --timeout {{ gunicorn_timeout | default(300) }} \
+    --keep-alive {{ gunicorn_keep_alive | default(2) }} \
+    --max-requests {{ gunicorn_max_requests | default(500) }} \
+    --max-requests-jitter {{ gunicorn_max_requests_jitter | default(50) }} \
+    --worker-class {{ gunicorn_worker_class | default('sync') }} \
+    --worker-connections {{ gunicorn_worker_connections | default(1000) }} \
+    --bind 127.0.0.1:8000 \
+    {{ app_name }}.wsgi:application
 Restart=always
 RestartSec=3
 Environment=PATH={{ app_home }}/venv/bin
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

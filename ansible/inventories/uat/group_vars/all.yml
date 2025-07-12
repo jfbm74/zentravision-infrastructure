@@ -29,3 +29,31 @@ backup_retention_days: 15
 # UAT-specific settings
 debug_mode: false
 log_level: INFO
+
+# ============================================
+# NEW: Performance and Timeout Configuration
+# ============================================
+
+# Gunicorn settings for AI processing
+gunicorn_workers: 2
+gunicorn_timeout: 300  # 5 minutes for AI processing
+gunicorn_keep_alive: 2
+gunicorn_max_requests: 500
+gunicorn_max_requests_jitter: 50
+gunicorn_worker_class: sync
+gunicorn_worker_connections: 1000
+
+# Nginx settings for large file uploads
+nginx_max_body_size: "50M"  # PDF uploads
+nginx_body_buffer_size: "128k"
+nginx_proxy_timeout: "300s"  # 5 minutes
+nginx_send_timeout: "300s"
+nginx_proxy_buffer_size: "64k"
+nginx_proxy_buffers: "8 64k"
+nginx_proxy_busy_buffers: "128k"
+
+# Celery settings (if used)
+celery_worker_concurrency: 1
+celery_max_memory: 100000
+celery_time_limit: 180
+celery_soft_time_limit: 150

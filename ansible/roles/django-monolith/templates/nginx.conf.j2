@@ -2,12 +2,33 @@ server {
     listen 80;
     server_name {{ domain_name }} {{ ansible_host }};
 
+    # Increase client body size for PDF uploads
+    client_max_body_size {{ nginx_max_body_size | default('50M') }};
+    
+    # Increase buffer sizes for large uploads
+    client_body_buffer_size {{ nginx_body_buffer_size | default('128k') }};
+    
+    # Increase timeouts for AI processing
+    proxy_connect_timeout {{ nginx_proxy_timeout | default('300s') }};
+    proxy_send_timeout {{ nginx_proxy_timeout | default('300s') }};
+    proxy_read_timeout {{ nginx_proxy_timeout | default('300s') }};
+    send_timeout {{ nginx_send_timeout | default('300s') }};
+    
+    # Increase buffer sizes for proxy
+    proxy_buffer_size {{ nginx_proxy_buffer_size | default('64k') }};
+    proxy_buffers {{ nginx_proxy_buffers | default('8 64k') }};
+    proxy_busy_buffers_size {{ nginx_proxy_busy_buffers | default('128k') }};
+
     location /static/ {
         alias {{ app_home }}/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
     }
 
     location /media/ {
         alias {{ app_home }}/media/;
+        expires 1M;
+        add_header Cache-Control "public";
     }
 
     location / {
@@ -16,5 +37,12 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Prevent timeouts during file uploads and AI processing
+        proxy_request_buffering off;
+        proxy_buffering off;
+        
+        # Handle connection drops gracefully
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
     }
 }

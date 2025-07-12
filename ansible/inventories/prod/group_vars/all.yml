@@ -25,3 +25,31 @@ firewall_enabled: true
 # Backup settings
 backup_enabled: true
 backup_retention_days: 30
+
+# ============================================
+# Performance and Timeout Configuration
+# ============================================
+
+# Gunicorn settings for AI processing
+gunicorn_workers: 3  # More workers for production
+gunicorn_timeout: 300  # 5 minutes for AI processing
+gunicorn_keep_alive: 2
+gunicorn_max_requests: 1000
+gunicorn_max_requests_jitter: 100
+gunicorn_worker_class: sync
+gunicorn_worker_connections: 1000
+
+# Nginx settings for large file uploads
+nginx_max_body_size: "100M"  # Larger for production
+nginx_body_buffer_size: "256k"
+nginx_proxy_timeout: "300s"  # 5 minutes
+nginx_send_timeout: "300s"
+nginx_proxy_buffer_size: "128k"
+nginx_proxy_buffers: "16 128k"
+nginx_proxy_busy_buffers: "256k"
+
+# Celery settings
+celery_worker_concurrency: 2
+celery_max_memory: 200000
+celery_time_limit: 300
+celery_soft_time_limit: 270
