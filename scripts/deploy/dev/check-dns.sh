@@ -67,7 +67,7 @@ else
     echo "🔍 Diagnosticando SSL..."
     
     # Conectar por SSH y verificar estado de SSL
-    ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no admin@$INSTANCE_IP << 'EOFREMOTE'
+    ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no zentravision@$INSTANCE_IP << 'EOFREMOTE'
 echo "🔍 Estado de certbot en el servidor:"
 
 # Verificar si certbot está instalado
@@ -113,7 +113,7 @@ EOFREMOTE
         echo "⚠️  HTTPS aún no disponible. Puede tardar unos minutos más."
         echo ""
         echo "💡 Comandos para verificar manualmente:"
-        echo "   ssh admin@$INSTANCE_IP"
+        echo "   ssh zentravision@$INSTANCE_IP"
         echo "   sudo certbot certificates"
         echo "   sudo nginx -t"
         echo "   sudo systemctl status nginx"

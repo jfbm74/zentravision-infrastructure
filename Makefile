@@ -25,9 +25,9 @@ destroy-dev: ## Destruir infraestructura (DEV - CUIDADO)
 	cd terraform/environments/dev && terraform destroy
 
 ssh-dev: ## Conectar por SSH a la instancia (DEV)
-	@INSTANCE_IP=$$(cd terraform/environments/dev && terraform output -raw instance_ip 2>/dev/null || echo "No encontrado"); \
-	if [ "$$INSTANCE_IP" != "No encontrado" ]; then \
-		ssh admin@$$INSTANCE_IP; \
+	@INSTANCE_IP=$(cd terraform/environments/dev && terraform output -raw instance_ip 2>/dev/null || echo "No encontrado"); \
+	if [ "$INSTANCE_IP" != "No encontrado" ]; then \
+		ssh zentravision@$INSTANCE_IP; \
 	else \
 		echo "Primero ejecuta 'make apply-dev' para crear la infraestructura"; \
 	fi

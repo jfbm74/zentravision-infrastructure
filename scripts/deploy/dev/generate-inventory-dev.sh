@@ -25,7 +25,7 @@ zentravision:
   hosts:
     zentravision-dev:
       ansible_host: $INSTANCE_IP
-      ansible_user: admin
+      ansible_user: zentravision
       ansible_ssh_private_key_file: ~/.ssh/id_rsa
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 
@@ -52,6 +52,7 @@ EOFDEV
 echo "✅ Inventario DEV generado: ../../../ansible/inventories/dev/hosts.yml"
 echo "📍 Instance IP: $INSTANCE_IP"
 echo "🌐 Dominio: dev-zentravision.zentratek.com"
+echo "👤 Usuario SSH: zentravision"
 echo ""
 echo "⚠️  IMPORTANTE: Configura el DNS para que dev-zentravision.zentratek.com apunte a $INSTANCE_IP"
 

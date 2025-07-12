@@ -156,8 +156,8 @@ else
 fi
 
 echo "📍 IP de la instancia: $INSTANCE_IP"
-echo "🔗 SSH: ssh admin@$INSTANCE_IP"
-echo "📊 Logs: ssh admin@$INSTANCE_IP 'tail -f /opt/zentravision/logs/zentravision.log'"
+echo "🔗 SSH: ssh zentravision@$INSTANCE_IP"
+echo "📊 Logs: ssh zentravision@$INSTANCE_IP 'tail -f /opt/zentravision/logs/zentravision.log'"
 echo ""
 echo "⚠️  IMPORTANTE: DNS ya configurado"
 echo "================================="
