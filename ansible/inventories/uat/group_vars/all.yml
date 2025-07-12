@@ -6,7 +6,7 @@ environment: uat
 # Application settings
 app_name: zentravision
 app_repo_url: "https://github.com/jfbm74/zentravision.git"
-app_version: release
+app_version: main
 
 # Domain configuration
 domain_name: "uat-zentravision.zentratek.com"

@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e
+
+# Instalar dependencias adicionales que podrían faltar
+{{ app_home }}/venv/bin/pip install django-redis
+{{ app_home }}/venv/bin/pip install google-cloud-secret-manager
+{{ app_home }}/venv/bin/pip install celery
+{{ app_home }}/venv/bin/pip install gunicorn
+
+echo "Dependencias adicionales instaladas"

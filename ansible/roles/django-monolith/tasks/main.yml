@@ -1,0 +1,249 @@
+---
+# Variables
+- name: Set application variables
+  set_fact:
+    app_user: "{{ app_user | default('zentravision') }}"
+    app_home: "{{ app_home | default('/opt/zentravision') }}"
+    app_name: "{{ app_name | default('zentravision') }}"
+
+# Python and system packages
+- name: Install Python and system dependencies
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      - python3-psycopg2
+      - build-essential
+      - libpq-dev
+      - postgresql
+      - postgresql-contrib
+      - redis-server
+      - nginx
+      - supervisor
+      - gettext
+    state: present
+
+# PostgreSQL setup
+- name: Start and enable PostgreSQL
+  systemd:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Create PostgreSQL database user
+  postgresql_user:
+    name: "{{ app_user }}"
+    password: "{{ vault_db_password | default('ZentravisionUAT2024!') }}"
+    state: present
+  become_user: postgres
+
+- name: Create PostgreSQL database
+  postgresql_db:
+    name: "{{ app_name }}"
+    owner: "{{ app_user }}"
+    state: present
+  become_user: postgres
+
+# Redis setup
+- name: Start and enable Redis
+  systemd:
+    name: redis-server
+    state: started
+    enabled: yes
+
+# Application setup
+- name: Ensure app directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+  loop:
+    - "{{ app_home }}"
+    - "{{ app_home }}/app"
+    - "{{ app_home }}/logs"
+    - "{{ app_home }}/static"
+    - "{{ app_home }}/media"
+    - "{{ app_home }}/backups"
+
+# Clone or update application code
+- name: Clone/update application repository
+  git:
+    repo: "{{ app_repo_url }}"
+    dest: "{{ app_home }}/app"
+    version: "{{ app_version | default('main') }}"
+    force: yes
+  become_user: "{{ app_user }}"
+  when: app_repo_url is defined
+
+# Python virtual environment
+- name: Create Python virtual environment
+  command: python3 -m venv {{ app_home }}/venv
+  args:
+    creates: "{{ app_home }}/venv/bin/activate"
+  become_user: "{{ app_user }}"
+
+# Install Python dependencies (if requirements.txt exists)
+- name: Check if requirements.txt exists
+  stat:
+    path: "{{ app_home }}/app/requirements.txt"
+  register: requirements_file
+
+- name: Install Python dependencies
+  pip:
+    requirements: "{{ app_home }}/app/requirements.txt"
+    virtualenv: "{{ app_home }}/venv"
+  become_user: "{{ app_user }}"
+  when: requirements_file.stat.exists
+
+# Install additional dependencies script
+- name: Create additional dependencies install script
+  template:
+    src: install_additional_deps.sh.j2
+    dest: "{{ app_home }}/install_additional_deps.sh"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+
+- name: Install additional Python dependencies
+  command: "{{ app_home }}/install_additional_deps.sh"
+  become_user: "{{ app_user }}"
+
+# Create minimal Django project if app doesn't exist
+- name: Check if Django project exists
+  stat:
+    path: "{{ app_home }}/app/manage.py"
+  register: django_project
+
+- name: Create minimal Django project
+  block:
+    - name: Install Django and essential packages in venv
+      pip:
+        name:
+          - django
+          - psycopg2-binary
+          - gunicorn
+          - django-redis
+          - google-cloud-secret-manager
+        virtualenv: "{{ app_home }}/venv"
+      become_user: "{{ app_user }}"
+    
+    - name: Create Django project
+      command: "{{ app_home }}/venv/bin/django-admin startproject {{ app_name }} ."
+      args:
+        chdir: "{{ app_home }}/app"
+        creates: "{{ app_home }}/app/manage.py"
+      become_user: "{{ app_user }}"
+    
+    - name: Create health check view file
+      copy:
+        dest: "{{ app_home }}/app/health_views.py"
+        content: |
+          from django.http import JsonResponse
+          
+          def health_check(request):
+              return JsonResponse({
+                  "status": "healthy", 
+                  "environment": "{{ environment }}",
+                  "service": "zentravision"
+              })
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+    
+    - name: Update Django URLs to include health check
+      copy:
+        dest: "{{ app_home }}/app/{{ app_name }}/urls.py"
+        content: |
+          from django.contrib import admin
+          from django.urls import path
+          from health_views import health_check
+          
+          urlpatterns = [
+              path('admin/', admin.site.urls),
+              path('health/', health_check, name='health_check'),
+          ]
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+
+  when: not django_project.stat.exists
+
+# Environment file
+- name: Create/update environment file
+  template:
+    src: env.j2
+    dest: "{{ app_home }}/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0600'
+
+# Django operations (con mejor manejo de errores)
+- name: Run Django migrations
+  django_manage:
+    command: migrate
+    app_path: "{{ app_home }}/app"
+    virtualenv: "{{ app_home }}/venv"
+  become_user: "{{ app_user }}"
+  environment:
+    DATABASE_URL: "postgresql://{{ app_user }}:{{ vault_db_password | default('ZentravisionUAT2024!') }}@localhost:5432/{{ app_name }}"
+  ignore_errors: yes
+  register: migrate_result
+
+- name: Show migration output if failed
+  debug:
+    var: migrate_result
+  when: migrate_result.failed | default(false)
+
+# Collect static files
+- name: Collect Django static files
+  django_manage:
+    command: collectstatic
+    app_path: "{{ app_home }}/app"
+    virtualenv: "{{ app_home }}/venv"
+  become_user: "{{ app_user }}"
+  environment:
+    DATABASE_URL: "postgresql://{{ app_user }}:{{ vault_db_password | default('ZentravisionUAT2024!') }}@localhost:5432/{{ app_name }}"
+  ignore_errors: yes
+
+# Gunicorn service
+- name: Create Gunicorn service file
+  template:
+    src: gunicorn.service.j2
+    dest: "/etc/systemd/system/{{ app_name }}.service"
+  notify:
+    - reload systemd
+    - restart zentravision
+
+# Nginx configuration
+- name: Create Nginx site configuration
+  template:
+    src: nginx.conf.j2
+    dest: "/etc/nginx/sites-available/{{ app_name }}"
+  notify: restart nginx
+
+- name: Enable Nginx site
+  file:
+    src: "/etc/nginx/sites-available/{{ app_name }}"
+    dest: "/etc/nginx/sites-enabled/{{ app_name }}"
+    state: link
+  notify: restart nginx
+
+- name: Remove default Nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: restart nginx
+
+# Start services
+- name: Start and enable application services
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  loop:
+    - "{{ app_name }}"
+    - nginx
+  ignore_errors: yes

@@ -1,6 +1,5 @@
 ---
-- name: restart ssh
+- name: restart fail2ban
   systemd:
-    name: ssh
+    name: fail2ban
     state: restarted
-  become: yes
