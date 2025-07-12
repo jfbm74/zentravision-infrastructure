@@ -1,0 +1,25 @@
+# GCP Configuration
+project_id = "zentraflow"
+region     = "us-central1"
+zone       = "us-central1-a"
+environment = "prod"
+
+# Instance Configuration
+machine_type = "e2-standard-2"
+disk_size    = 20
+
+# Domain Configuration
+domain_name = "zentravision.tudominio.com"
+admin_email = "admin@tudominio.com"
+dns_zone    = ""  # Dejar vacío si no usas Cloud DNS
+
+# SSH Configuration
+admin_user = "admin"
+ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2E... your-public-key-here"
+ssh_source_ranges = ["YOUR_IP/32"]  # Reemplazar con tu IP
+
+# Backup Configuration
+backup_retention_days = 30
+
+# Monitoring (opcional)
+notification_channels = []

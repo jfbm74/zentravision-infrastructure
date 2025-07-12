@@ -1,0 +1,31 @@
+---
+# Global variables for development environment
+gcp_project_id: zentraflow
+environment: dev
+
+# Application settings
+app_name: zentravision
+app_repo_url: "https://github.com/jfbm74/zentravision.git"
+app_version: develop  # Usar rama develop para dev
+
+# Domain configuration
+domain_name: "{{ vault_domain_name | default('dev-zentravision.ejemplo.com') }}"
+admin_email: "{{ vault_admin_email | default('admin@ejemplo.com') }}"
+
+# Django settings
+django_create_superuser: true
+django_superuser_username: admin
+django_superuser_email: "{{ admin_email }}"
+django_superuser_password: "{{ vault_django_superuser_password | default('DevPassword123!') }}"
+
+# SSL and security (Opcional para dev)
+ssl_enabled: false  # Desactivar SSL para dev simplifica setup
+firewall_enabled: true
+
+# Backup settings (Menos frecuente para dev)
+backup_enabled: false  # Desactivar backups para dev
+backup_retention_days: 7
+
+# Dev-specific settings
+debug_mode: true
+log_level: DEBUG

@@ -1,0 +1,31 @@
+---
+# Global variables for UAT environment
+gcp_project_id: zentraflow
+environment: uat
+
+# Application settings
+app_name: zentravision
+app_repo_url: "https://github.com/jfbm74/zentravision.git"
+app_version: release
+
+# Domain configuration
+domain_name: "uat-zentravision.zentratek.com"
+admin_email: "admin@zentratek.com"
+
+# Django settings
+django_create_superuser: true
+django_superuser_username: admin
+django_superuser_email: "admin@zentratek.com"
+django_superuser_password: "UatPassword123!"
+
+# SSL and security
+ssl_enabled: true
+firewall_enabled: true
+
+# Backup settings
+backup_enabled: true
+backup_retention_days: 15
+
+# UAT-specific settings
+debug_mode: false
+log_level: INFO
