@@ -1,0 +1,29 @@
+[Unit]
+Description=Zentravision Celery Beat Service (Scheduler)
+After=network.target redis-server.service postgresql.service
+
+[Service]
+Type=simple
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_home }}/app
+ExecStart={{ app_home }}/venv/bin/celery -A {{ app_name }} beat \
+    --loglevel={{ celery_log_level | default('info') }} \
+    --logfile={{ app_home }}/logs/celery/beat.log \
+    --pidfile=/var/run/celery/beat.pid \
+    --schedule={{ app_home }}/logs/celery/celerybeat-schedule
+Restart=always
+RestartSec=10
+
+# Variables de entorno
+Environment=DJANGO_SETTINGS_MODULE={{ app_name }}.settings
+Environment=PYTHONPATH={{ app_home }}/app
+Environment=C_FORCE_ROOT=1
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier={{ app_name }}-celery-beat
+
+[Install]
+WantedBy=multi-user.target

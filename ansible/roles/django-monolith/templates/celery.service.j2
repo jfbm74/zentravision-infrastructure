@@ -1,0 +1,22 @@
+[Unit]
+Description=Zentravision Celery Worker Service
+After=network.target redis-server.service postgresql.service
+
+[Service]
+Type=exec
+User={{ app_user }}
+Group={{ app_user }}
+WorkingDirectory={{ app_home }}/app
+ExecStart={{ app_home }}/venv/bin/celery -A {{ app_name }} worker \
+    --loglevel={{ celery_log_level | default('info') }} \
+    --concurrency={{ celery_worker_concurrency | default(1) }}
+Restart=always
+RestartSec=10
+Environment=DJANGO_SETTINGS_MODULE={{ app_name }}.settings
+Environment=PYTHONPATH={{ app_home }}/app
+Environment=C_FORCE_ROOT=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

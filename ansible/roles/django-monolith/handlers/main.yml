@@ -12,3 +12,24 @@
   systemd:
     name: nginx
     state: restarted
+
+- name: restart celery
+  systemd:
+    name: "{{ app_name }}-celery"
+    state: restarted
+
+- name: restart celery-beat
+  systemd:
+    name: "{{ app_name }}-celery-beat"
+    state: restarted
+  when: celery_beat_enabled | default(true)
+
+- name: stop celery
+  systemd:
+    name: "{{ app_name }}-celery"
+    state: stopped
+
+- name: start celery
+  systemd:
+    name: "{{ app_name }}-celery"
+    state: started

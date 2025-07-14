@@ -62,6 +62,7 @@
       loop:
         - zentravision
         - zentravision-celery
+        - zentravision-celery-beat
       tags: ['deploy']
 
     - name: Wait for application to start
@@ -91,3 +92,5 @@
       systemd:
         name: zentravision-celery
         state: restarted
+    
+
