@@ -1,0 +1,90 @@
+---
+# Celery Worker Configuration - MEJORADO
+- name: Check if Celery service exists
+  stat:
+    path: "/etc/systemd/system/{{ app_name }}-celery.service"
+  register: celery_service_exists
+
+- name: Stop Celery service if exists
+  systemd:
+    name: "{{ app_name }}-celery"
+    state: stopped
+  when: celery_service_exists.stat.exists
+  ignore_errors: yes
+
+- name: Kill existing Celery processes safely
+  shell: |
+    for pid in $(pgrep -f "celery.*worker" 2>/dev/null || echo ""); do
+      if [ -n "$pid" ]; then
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 1
+        kill -KILL "$pid" 2>/dev/null || true
+      fi
+    done
+  ignore_errors: yes
+  changed_when: false
+
+- name: Create Celery runtime directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+  loop:
+    - /var/run/celery
+    - /var/log/celery
+    - "{{ app_home }}/logs/celery"
+
+- name: Clean old PID files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/run/celery/worker.pid
+    - /var/run/celery/beat.pid
+  ignore_errors: yes
+
+- name: Create Celery systemd service file
+  template:
+    src: celery.service.j2
+    dest: "/etc/systemd/system/{{ app_name }}-celery.service"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Enable and start Celery service
+  systemd:
+    name: "{{ app_name }}-celery"
+    enabled: yes
+    state: started
+
+- name: Wait for Celery to start
+  wait_for:
+    timeout: 30
+    delay: 10
+
+- name: Verify Celery is running
+  command: systemctl is-active {{ app_name }}-celery
+  register: celery_status
+  retries: 3
+  delay: 5
+  until: celery_status.stdout == "active"
+  changed_when: false
+
+- name: Display Celery success message
+  debug:
+    msg: |
+      🎉 Celery Worker Successfully Started!
+      ====================================
+      Status: {{ celery_status.stdout }}
+      Workers: {{ celery_worker_concurrency | default(1) }}
+      Log Level: {{ celery_log_level | default('info') }}
+      
+      Commands:
+      - sudo systemctl status {{ app_name }}-celery
+      - sudo journalctl -u {{ app_name }}-celery -f

@@ -325,3 +325,8 @@
       2. Test HTTP access: http://{{ domain_name }}
       3. Login to admin panel
       4. Upload test PDF
+
+# Import Celery configuration tasks
+- name: Configure Celery Workers
+  include_tasks: celery.yml
+  tags: ['celery', 'workers']

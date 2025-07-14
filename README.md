@@ -1,16 +1,182 @@
 # Zentravision Infrastructure
 
-Infrastructure as Code (IaC) y Configuration as Code (CaC) para Zentravision - Una aplicación Django para procesamiento de PDFs con IA.
+Infrastructure as Code (IaC) y Configuration as Code (CaC) para **Zentravision** - Una aplicación Django para procesamiento inteligente de glosas médicas con IA.
 
-## 🏗️ Arquitectura
+## 🩺 Sobre Zentravision
 
-- **Infraestructura**: Terraform + Google Cloud Platform
-- **Configuración**: Ansible
-- **Aplicación**: Django monolítico con Nginx + Gunicorn
+**Zentravision** es una aplicación Django especializada en el procesamiento automático de glosas médicas utilizando Inteligencia Artificial. La aplicación permite:
+
+- **Extracción de texto** de documentos PDF médicos
+- **Procesamiento inteligente** de glosas con OpenAI GPT
+- **Análisis automático** de contenido médico
+- **Gestión de batches** para procesamiento masivo
+- **Tareas asíncronas** con Celery para procesamiento en background
+- **API REST** para integración con otros sistemas
+
+### 🏗️ Arquitectura Técnica
+
+- **Backend**: Django 4.x + Python 3.10
 - **Base de datos**: PostgreSQL
-- **Cache**: Redis
-- **Almacenamiento**: Google Cloud Storage
+- **Cache & Queue**: Redis + Celery
+- **Web Server**: Nginx + Gunicorn
+- **IA Processing**: OpenAI GPT API
+- **Infraestructura**: Google Cloud Platform
+- **IaC**: Terraform + Ansible
 - **Monitoreo**: Google Cloud Monitoring
+
+## 🚀 Comandos de Supervivencia
+
+### 🔄 Reiniciar Servicios
+
+```bash
+# Conectar al servidor
+ssh zentravision@34.45.112.122  # DEV
+ssh zentravision@<IP_UAT>        # UAT  
+ssh admin@<IP_PROD>              # PROD
+
+# Reiniciar todos los servicios
+sudo systemctl restart zentravision zentravision-celery nginx
+
+# Reiniciar servicios individualmente
+sudo systemctl restart zentravision        # Django/Gunicorn
+sudo systemctl restart zentravision-celery # Celery workers  
+sudo systemctl restart nginx               # Nginx
+sudo systemctl restart postgresql          # Base de datos
+sudo systemctl restart redis-server        # Redis/Cache
+```
+
+### 📊 Ver Logs en Tiempo Real
+
+```bash
+# Logs de la aplicación Django
+sudo journalctl -u zentravision -f
+
+# Logs de Celery workers
+sudo journalctl -u zentravision-celery -f
+
+# Logs de Nginx
+sudo journalctl -u nginx -f
+
+# Logs de aplicación (si existen)
+tail -f /opt/zentravision/logs/zentravision.log
+
+# Ver todos los logs juntos
+sudo journalctl -u zentravision -u zentravision-celery -u nginx -f
+
+# Logs específicos de errores
+sudo journalctl -u zentravision --since "1 hour ago" | grep -i error
+```
+
+### 🔍 Verificar Estado de Servicios
+
+```bash
+# Estado de todos los servicios principales
+sudo systemctl status zentravision zentravision-celery nginx postgresql redis-server
+
+# Solo verificar si están activos
+sudo systemctl is-active zentravision zentravision-celery nginx
+
+# Ver procesos de Celery
+ps aux | grep celery
+
+# Verificar conectividad web
+curl -I http://localhost:8000/
+curl -I http://localhost/  # A través de Nginx
+```
+
+### 🧪 Probar Funcionalidad
+
+```bash
+# Test de conectividad de Celery
+cd /opt/zentravision/app
+python manage.py shell << 'EOF'
+from celery import current_app
+i = current_app.control.inspect()
+print("Workers activos:", i.stats())
+exit()
+EOF
+
+# Test de OpenAI configuración
+python manage.py shell << 'EOF'
+from django.conf import settings
+print("OpenAI configurado:", hasattr(settings, 'OPENAI_API_KEY'))
+exit()
+EOF
+
+# Verificar base de datos
+python manage.py check --database default
+
+# Test de health check
+curl http://localhost:8000/health/
+```
+
+### 🔑 Configurar OpenAI Token
+
+```bash
+# Método 1: Via Google Secret Manager (recomendado)
+echo "tu-openai-api-key" | gcloud secrets create zentraflow-dev-openai-key --data-file=-
+
+# Método 2: Editar settings.py directamente (temporal)
+cd /opt/zentravision/app
+nano zentravision/settings.py
+# Agregar: OPENAI_API_KEY = "tu-api-key-aqui"
+
+# Reiniciar Django para aplicar cambios
+sudo systemctl restart zentravision
+
+# Verificar que se aplicó
+python manage.py shell -c "from django.conf import settings; print('OpenAI:', hasattr(settings, 'OPENAI_API_KEY'))"
+```
+
+### 🗄️ Gestión de Base de Datos
+
+```bash
+# Conectar a PostgreSQL
+sudo -u postgres psql zentravision
+
+# Backup manual
+sudo -u zentravision /opt/zentravision/backup-db.sh
+
+# Ver migraciones pendientes
+cd /opt/zentravision/app
+python manage.py showmigrations
+
+# Aplicar migraciones
+python manage.py migrate
+
+# Crear superusuario
+python manage.py createsuperuser
+```
+
+### 🔧 Solución de Problemas Rápidos
+
+```bash
+# Error 502 Bad Gateway
+sudo systemctl restart zentravision nginx
+sudo systemctl status zentravision
+
+# Celery no procesa tareas
+sudo systemctl restart zentravision-celery
+sudo journalctl -u zentravision-celery --since "5 minutes ago"
+
+# Espacio en disco
+df -h
+du -sh /opt/zentravision/logs/*
+
+# Limpiar logs antiguos
+find /opt/zentravision/logs -name "*.log" -mtime +7 -delete
+
+# Verificar conectividad de red
+ping 8.8.8.8
+curl -I https://api.openai.com/v1/models
+
+# Reiniciar todo si falla
+sudo systemctl stop zentravision zentravision-celery nginx
+sleep 5
+sudo systemctl start postgresql redis-server
+sleep 2  
+sudo systemctl start zentravision zentravision-celery nginx
+```
 
 ## 📁 Estructura del Proyecto
 
@@ -88,22 +254,16 @@ zentravision-infrastructure/
    export DJANGO_ADMIN_PASSWORD="TuPasswordMuySeguro123!"
    ```
 
-3. **Configurar Terraform (solo para el primer ambiente)**
+3. **Configurar OpenAI API Key**
    ```bash
-   # Para cualquier ambiente (ej: prod)
-   cp terraform/environments/prod/terraform.tfvars.example terraform/environments/prod/terraform.tfvars
+   # Configurar para DEV
+   ./scripts/configure-openai-key.sh zentraflow dev
    
-   # Editar con tus valores
-   nano terraform/environments/prod/terraform.tfvars
-   ```
-
-4. **Generar y configurar claves SSH**
-   ```bash
-   # Si no tienes claves SSH
-   ssh-keygen -t rsa -b 4096 -C "consultoria@zentratek.com"
+   # Para UAT
+   ./scripts/configure-openai-key.sh zentraflow uat
    
-   # Agregar la clave pública a terraform.tfvars
-   cat ~/.ssh/id_rsa.pub
+   # Para PROD
+   ./scripts/configure-openai-key.sh zentraflow prod
    ```
 
 ### 🎯 Despliegue Completo (Con IPs Dinámicas)
@@ -119,7 +279,7 @@ make plan-dev
 make apply-dev
 make deploy-dev
 
-# Verificar DNS y SSL
+# Verificar DNS y funcionalidad
 make check-dns-dev
 ```
 
@@ -134,7 +294,7 @@ make plan-uat
 make apply-uat
 make deploy-uat
 
-# Verificar DNS y SSL
+# Verificar DNS y funcionalidad
 make check-dns-uat
 ```
 
@@ -154,7 +314,7 @@ make plan
 make apply
 make deploy
 
-# Verificar DNS y SSL
+# Verificar DNS y funcionalidad
 make check-dns
 ```
 
@@ -197,13 +357,6 @@ make check-dns             # Verificar configuración DNS (PROD)
 make update-app-prod       # Actualizar solo la aplicación (PROD)
 ```
 
-### Comandos de Despliegue Completo
-```bash
-make full-deploy-dev       # Despliegue completo DEV (automático)
-make full-deploy-uat       # Despliegue completo UAT (con confirmaciones)
-make full-deploy-prod      # Despliegue completo PROD (múltiples confirmaciones)
-```
-
 ### Comandos de Utilidad
 ```bash
 make show-ips              # Mostrar IPs de todas las instancias
@@ -215,22 +368,20 @@ make clean-inventories     # Limpiar inventarios generados dinámicamente
 
 ### Desarrollo (DEV)
 - **Dominio**: `dev-zentravision.zentratek.com`
-- **SSL**: Habilitado con Let's Encrypt
+- **SSL**: Deshabilitado por defecto (evitar límites Let's Encrypt)
 - **Debug**: Habilitado
 - **Backups**: Deshabilitados
-- **Recursos**: Mínimos (2 workers Gunicorn)
-- **Usuario SSH**: `admin`
-- **Generación de inventario**: Automática en cada despliegue
+- **Celery Workers**: 1 worker
+- **Usuario SSH**: `zentravision`
 - **IP**: Dinámica (se obtiene automáticamente de Terraform)
 
 ### UAT
 - **Dominio**: `uat-zentravision.zentratek.com`
-- **SSL**: Habilitado con Let's Encrypt
+- **SSL**: Configurable
 - **Debug**: Deshabilitado
 - **Backups**: Habilitados (15 días retención)
-- **Recursos**: Medios (2 workers Gunicorn, timeouts 300s)
+- **Celery Workers**: 2 workers
 - **Usuario SSH**: `zentravision`
-- **Generación de inventario**: Automática en cada despliegue
 - **IP**: Dinámica (se obtiene automáticamente de Terraform)
 
 ### Producción (PROD)
@@ -238,95 +389,9 @@ make clean-inventories     # Limpiar inventarios generados dinámicamente
 - **SSL**: Habilitado con Let's Encrypt
 - **Debug**: Deshabilitado
 - **Backups**: Habilitados (30 días retención)
-- **Recursos**: Optimizados para producción (3 workers, timeouts 300s)
+- **Celery Workers**: 3 workers
 - **Usuario SSH**: `admin`
-- **Generación de inventario**: Automática en cada despliegue
 - **IP**: Dinámica (se obtiene automáticamente de Terraform)
-- **Confirmaciones**: Múltiples confirmaciones de seguridad
-
-## 🔧 Configuración Avanzada
-
-### Variables de Terraform
-
-Edita `terraform/environments/{env}/terraform.tfvars`:
-
-```hcl
-# GCP Configuration
-project_id = "zentraflow"
-region     = "us-central1"
-zone       = "us-central1-a"
-environment = "prod"  # o "dev", "uat"
-
-# Instance Configuration
-machine_type = "e2-standard-2"  # Ajustar según necesidades
-disk_size    = 20               # GB
-
-# Domain Configuration
-domain_name = "zentravision.zentratek.com"  # Tu dominio
-admin_email = "consultoria@zentratek.com"
-
-# SSH Configuration
-admin_user = "admin"  # "zentravision" para UAT
-ssh_public_key = "ssh-rsa AAAAB3N... tu-clave-publica"
-ssh_source_ranges = ["TU_IP/32"]  # Restringir acceso SSH
-
-# Backup Configuration
-backup_retention_days = 30
-```
-
-### Sistema de Inventarios Dinámicos
-
-Los inventarios de Ansible se generan automáticamente en cada despliegue:
-
-#### ✅ Antes (Problemático - IP hardcodeada)
-```yaml
-zentravision:
-  hosts:
-    zentravision-uat:
-      ansible_host: 34.58.128.35  # ❌ IP fija, se rompe al recrear
-```
-
-#### ✅ Ahora (Dinámico)
-```bash
-# El script obtiene la IP automáticamente de Terraform
-INSTANCE_IP=$(terraform output -raw instance_ip)
-# Y genera el inventario con la IP actual
-```
-
-#### Scripts de generación automática:
-- **DEV**: `scripts/deploy/dev/generate-inventory-dev.sh`
-- **UAT**: `scripts/deploy/uat/generate-inventory-uat.sh`
-- **PROD**: `scripts/deploy/prod/generate-inventory-prod.sh`
-
-### Variables de Ansible por Ambiente
-
-Las variables se configuran automáticamente en `ansible/inventories/{env}/group_vars/all.yml`:
-
-```yaml
-# Performance Configuration (ejemplo para PROD)
-gunicorn_workers: 3              # Número de workers
-gunicorn_timeout: 300            # Timeout para procesamiento IA
-nginx_max_body_size: "100M"     # Tamaño máximo de archivos
-nginx_proxy_timeout: "300s"     # Timeout de proxy
-
-# Security
-ssl_enabled: true
-firewall_enabled: true
-fail2ban_enabled: true
-
-# Application
-django_create_superuser: true
-django_superuser_username: admin
-debug_mode: false                # Solo true en DEV
-```
-
-### 🔄 Flujo de IP Dinámica
-
-1. **Terraform crea** la instancia con IP dinámica
-2. **Script de generación** obtiene la IP: `terraform output -raw instance_ip`
-3. **Inventario se genera** automáticamente con la IP actual
-4. **Ansible se ejecuta** con el inventario dinámico
-5. **DNS se configura** manualmente con la IP mostrada
 
 ## 🔐 Gestión de Secretos
 
@@ -350,9 +415,9 @@ Secretos requeridos:
 ### Verificar estado de la aplicación
 ```bash
 # Health check por ambiente
-make check-dns-dev      # Verifica DEV + DNS + SSL
-make check-dns-uat      # Verifica UAT + DNS + SSL  
-make check-dns         # Verifica PROD + DNS + SSL
+make check-dns-dev      # Verifica DEV + DNS
+make check-dns-uat      # Verifica UAT + DNS  
+make check-dns         # Verifica PROD + DNS
 
 # Health check de todos los ambientes
 make health-check
@@ -364,60 +429,17 @@ make show-ips
 make ssh-dev           # SSH a DEV
 make ssh-uat           # SSH a UAT  
 make ssh               # SSH a PROD
-sudo systemctl status zentravision nginx postgresql redis
-```
-
-### Logs de la aplicación
-```bash
-# En el servidor
-tail -f /opt/zentravision/logs/zentravision.log
-
-# Logs de sistema
-journalctl -u zentravision -f
-journalctl -u nginx -f
+sudo systemctl status zentravision zentravision-celery nginx postgresql redis-server
 ```
 
 ### Scripts de verificación automática
-- **`scripts/deploy/dev/check-dns.sh`**: Verifica DNS y SSL para DEV
-- **`scripts/deploy/uat/check-dns.sh`**: Verifica DNS y SSL para UAT  
-- **`scripts/deploy/prod/check-dns.sh`**: Verifica DNS y SSL para PROD
-
-### Métricas disponibles
-- Estado de servicios (zentravision, nginx, postgresql, redis)
-- Uso de CPU, memoria y disco
-- Logs de errores de aplicación
-- Respuesta HTTP de health check
-- Verificación automática de DNS y SSL
-- IPs dinámicas de todas las instancias
-
-## 🗄️ Backups
-
-### Backup automático
-Los backups se ejecutan automáticamente vía cron en producción y UAT.
-
-### Backup manual
-```bash
-# Ejecutar backup manual
-./scripts/backup/manual-backup.sh
-
-# En el servidor
-sudo -u zentravision /opt/zentravision/backup-db.sh
-```
-
-### Restaurar backup
-```bash
-# Listar backups disponibles
-gsutil ls gs://zentraflow-prod-backups/
-
-# Descargar y restaurar
-gsutil cp gs://zentraflow-prod-backups/zentravision_backup_YYYYMMDD_HHMMSS.sql.gz .
-gunzip zentravision_backup_YYYYMMDD_HHMMSS.sql.gz
-psql -h localhost -U zentravision zentravision < zentravision_backup_YYYYMMDD_HHMMSS.sql
-```
+- **`scripts/deploy/dev/check-dns.sh`**: Verifica DNS y conectividad para DEV
+- **`scripts/deploy/uat/check-dns.sh`**: Verifica DNS y conectividad para UAT  
+- **`scripts/deploy/prod/check-dns.sh`**: Verifica DNS y conectividad para PROD
 
 ## 🔄 Actualización de la Aplicación
 
-### Actualización automática (solo aplicación, sin infraestructura)
+### Actualización rápida (solo aplicación)
 ```bash
 # DEV - Actualización rápida
 make update-app-dev
@@ -435,125 +457,63 @@ make update-app-prod
 make full-deploy-dev    # DEV
 make full-deploy-uat    # UAT
 make full-deploy-prod   # PROD (requiere variables de entorno)
-
-# O paso a paso
-make deploy-dev         # Solo la parte de Ansible para DEV
-make deploy-uat         # Solo la parte de Ansible para UAT
-make deploy             # Solo la parte de Ansible para PROD
 ```
 
-### 🔄 Ventajas del Sistema Dinámico
+## 🐛 Troubleshooting Específico de Zentravision
 
-1. **Sin IPs hardcodeadas**: Los inventarios se generan automáticamente
-2. **Recreación sin problemas**: Destruir y recrear infraestructura funciona perfectamente
-3. **DNS automático**: Scripts te dicen exactamente qué configurar
-4. **Verificación integrada**: Comandos `check-dns-*` verifican todo
-5. **Información clara**: Cada despliegue te muestra la IP actual
+### Problemas con Procesamiento de PDFs
 
-## 🐛 Troubleshooting
-
-### Problemas comunes
-
-1. **Error de autenticación de Google Cloud**
-   ```bash
-   gcloud auth revoke --all
-   gcloud auth login
-   gcloud auth application-default login
-   gcloud config set project zentraflow
-   ```
-
-2. **Error de SSH**
-   ```bash
-   # Verificar que la clave pública esté en terraform.tfvars
-   # Verificar que el firewall permita tu IP
-   gcloud compute firewall-rules list --filter="name~ssh"
-   
-   # Generar inventario y obtener IP actual
-   make show-ips
-   ```
-
-3. **Error de certificado SSL**
-   ```bash
-   # Los certificados pueden tardar 5-10 minutos en configurarse
-   # Verificar logs de certbot
-   make ssh-{env}  # ssh-dev, ssh-uat, o ssh
-   sudo journalctl -u snap.certbot.renew.service -f
-   
-   # Verificar DNS primero
-   make check-dns-{env}
-   ```
-
-4. **Error 502 Bad Gateway**
-   ```bash
-   # Verificar que Gunicorn esté ejecutándose
-   make ssh-{env}
-   sudo systemctl status zentravision
-   tail -f /opt/zentravision/logs/zentravision.log
-   
-   # Verificar que el inventario sea correcto
-   cat ansible/inventories/{env}/hosts.yml
-   ```
-
-5. **Error en la instalación de dependencias**
-   ```bash
-   # Reinstalar dependencias Python
-   make ssh-{env}
-   sudo -u zentravision /opt/zentravision/venv/bin/pip install -r /opt/zentravision/app/requirements.txt
-   ```
-
-6. **Inventario con IP incorrecta**
-   ```bash
-   # Regenerar inventario automáticamente
-   ./scripts/deploy/{env}/generate-inventory-{env}.sh
-   
-   # O limpiar y regenerar todos
-   make clean-inventories
-   make deploy-{env}  # Regenera automáticamente
-   ```
-
-7. **DNS no resuelve**
-   ```bash
-   # Verificar configuración DNS
-   make check-dns-{env}
-   
-   # Verificar IP actual de la instancia
-   make show-ips
-   
-   # Configurar DNS manualmente con la IP mostrada
-   ```
-
-### Logs de diagnóstico
 ```bash
-# Logs de startup de la instancia
-make ssh-{env}
-sudo cat /var/log/startup-script.log
+# Verificar logs de Celery para errores de procesamiento
+sudo journalctl -u zentravision-celery --since "1 hour ago" | grep -i error
 
-# Ver información del último despliegue
-cat .last-{env}-ip          # IP de DEV/UAT
-cat .last-prod-deployment   # Información completa de PROD
+# Verificar OpenAI API Key
+cd /opt/zentravision/app
+python manage.py shell -c "from django.conf import settings; print('OpenAI OK:', hasattr(settings, 'OPENAI_API_KEY'))"
 
-# Logs de Terraform
-cd terraform/environments/{env}
-terraform show
-
-# Estado de todos los ambientes
-make health-check
+# Test de conectividad con OpenAI
+curl -H "Authorization: Bearer $(python -c 'from django.conf import settings; print(settings.OPENAI_API_KEY)')" \
+     https://api.openai.com/v1/models
 ```
 
-### Scripts de recuperación
+### Problemas con Celery Workers
+
 ```bash
-# Si perdiste la IP de una instancia
-make show-ips
+# Verificar workers activos
+cd /opt/zentravision/app
+python manage.py shell << 'EOF'
+from celery import current_app
+i = current_app.control.inspect()
+print("Workers stats:", i.stats())
+print("Active tasks:", i.active())
+EOF
 
-# Regenerar inventario para cualquier ambiente
-./scripts/deploy/dev/generate-inventory-dev.sh
-./scripts/deploy/uat/generate-inventory-uat.sh  
-./scripts/deploy/prod/generate-inventory-prod.sh
+# Reiniciar Celery si no responde
+sudo systemctl restart zentravision-celery
+sudo systemctl status zentravision-celery
 
-# Verificar conectividad
-make check-dns-dev
-make check-dns-uat
-make check-dns
+# Ver cola de tareas en Redis
+redis-cli
+> KEYS celery*
+> LLEN celery
+```
+
+### Problemas de Performance
+
+```bash
+# Verificar uso de recursos
+top
+htop
+df -h
+
+# Ver logs de aplicación con timestamps
+sudo journalctl -u zentravision --since "1 hour ago" -o short-iso
+
+# Optimizar base de datos
+cd /opt/zentravision/app
+python manage.py dbshell << 'EOF'
+VACUUM ANALYZE;
+EOF
 ```
 
 ## 🔒 Seguridad
@@ -561,70 +521,20 @@ make check-dns
 ### Configuración de seguridad incluida
 - Firewall UFW configurado
 - Fail2ban para protección SSH
-- SSL/HTTPS automático con Let's Encrypt
+- SSL/HTTPS automático (configurable)
 - Acceso SSH restringido por IP
 - Service Account con permisos mínimos
 - Backups encriptados en Google Cloud Storage
+- Secretos gestionados via Google Secret Manager
 
-### Recomendaciones adicionales
-1. Cambiar la contraseña del admin por defecto
-2. Configurar 2FA en Google Cloud Console
-3. Revisar logs de seguridad regularmente
-4. Mantener sistema actualizado
-5. Restringir acceso SSH a IPs específicas
+### Recomendaciones específicas para Zentravision
+1. **Rotar OpenAI API Key** regularmente
+2. **Monitorear uso de API** de OpenAI
+3. **Configurar límites** de procesamiento por usuario
+4. **Revisar logs** de procesamiento de documentos
+5. **Mantener backups** de documentos procesados
 
-## 📝 Desarrollo
-
-### Agregar nuevos ambientes
-1. Crear directorio en `terraform/environments/nuevo-env/`
-2. Copiar archivos de configuración de un ambiente existente
-3. Crear script de generación de inventario en `scripts/deploy/nuevo-env/`
-4. Agregar comandos al Makefile siguiendo el patrón existente
-
-### Modificar configuración
-1. **Infraestructura**: Editar archivos Terraform en `terraform/environments/{env}/`
-2. **Aplicación**: Editar roles de Ansible en `ansible/roles/`
-3. **Variables**: Editar archivos de variables en `ansible/inventories/{env}/group_vars/`
-4. **Dominios**: Cambiar variables de entorno antes del despliegue
-
-### Sistema de inventarios dinámicos
-Los inventarios se generan automáticamente y **NO** deben editarse manualmente:
-
-```bash
-# ❌ NO hacer esto
-nano ansible/inventories/uat/hosts.yml
-
-# ✅ Hacer esto en su lugar
-./scripts/deploy/uat/generate-inventory-uat.sh
-# o simplemente
-make deploy-uat  # Regenera automáticamente
-```
-
-### Flujo de desarrollo recomendado
-1. **Desarrollar en DEV**: `make full-deploy-dev`
-2. **Probar en UAT**: `make full-deploy-uat`  
-3. **Promocionar a PROD**: `make full-deploy-prod`
-4. **Actualizaciones rápidas**: `make update-app-{env}`
-
-### Debugging del sistema dinámico
-```bash
-# Ver qué IPs están configuradas
-make show-ips
-
-# Verificar generación de inventarios
-ls -la ansible/inventories/*/hosts.yml
-
-# Limpiar y regenerar todo
-make clean-inventories
-make deploy-{env}
-```
-
-## 🆘 Soporte
-
-### Enlaces útiles
-- [Documentación de Terraform GCP](https://registry.terraform.io/providers/hashicorp/google/latest/docs)
-- [Documentación de Ansible](https://docs.ansible.com/)
-- [Google Cloud Console](https://console.cloud.google.com/)
+## 🆘 Contacto y Soporte
 
 ### Información del proyecto
 - **Proyecto GCP**: zentraflow
@@ -634,13 +544,33 @@ make deploy-{env}
 ### Dominios configurados
 - **DEV**: `dev-zentravision.zentratek.com`
 - **UAT**: `uat-zentravision.zentratek.com`  
-- **PROD**: Configurable via `DOMAIN_NAME` (ej: `zentravision.zentratek.com`)
+- **PROD**: Configurable via `DOMAIN_NAME`
 
-### Scripts clave
-- **Inventarios dinámicos**: `scripts/deploy/{env}/generate-inventory-{env}.sh`
-- **Verificación DNS**: `scripts/deploy/{env}/check-dns.sh`
-- **Despliegue completo**: `scripts/deploy/{env}/deploy-{env}.sh`
+### Scripts clave para emergencias
+```bash
+# Script de reinicio completo
+ssh zentravision@<IP> << 'EOF'
+sudo systemctl stop zentravision zentravision-celery nginx
+sleep 5
+sudo systemctl start postgresql redis-server
+sleep 2
+sudo systemctl start zentravision zentravision-celery nginx
+sudo systemctl status zentravision zentravision-celery nginx
+EOF
+
+# Script de verificación rápida
+ssh zentravision@<IP> << 'EOF'
+echo "=== SERVICIOS ==="
+sudo systemctl is-active zentravision zentravision-celery nginx postgresql redis-server
+echo "=== CELERY WORKERS ==="
+ps aux | grep [c]elery
+echo "=== CONECTIVIDAD ==="
+curl -s -o /dev/null -w "HTTP: %{http_code}\n" http://localhost:8000/
+EOF
+```
 
 ---
 
-**🔄 Nuevo Sistema de IPs Dinámicas**: Los inventarios se generan automáticamente en cada despliegue. ¡No más problemas con IPs hardcodeadas! 🚀
+**🩺 Zentravision**: Procesamiento inteligente de glosas médicas con IA  
+**🔄 Sistema de IPs Dinámicas**: Los inventarios se generan automáticamente en cada despliegue  
+**🚀 Celery Workers**: Configurados para procesamiento asíncrono eficiente
