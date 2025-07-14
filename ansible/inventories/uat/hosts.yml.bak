@@ -23,5 +23,5 @@ zentravision:
     
     # UAT settings
     debug_mode: false
-    ssl_enabled: false
+    ssl_enabled: true
     backup_enabled: true
