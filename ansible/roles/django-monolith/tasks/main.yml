@@ -6,7 +6,7 @@
     app_home: "{{ app_home | default('/opt/zentravision') }}"
     app_name: "{{ app_name | default('zentravision') }}"
 
-# Python and system packages
+# Python and system packages (REMOVED certbot packages)
 - name: Install Python and system dependencies
   apt:
     name:
@@ -23,8 +23,6 @@
       - nginx
       - supervisor
       - gettext
-      - certbot
-      - python3-certbot-nginx
     state: present
 
 # PostgreSQL setup
@@ -149,7 +147,7 @@
           def health_check(request):
               return JsonResponse({
                   "status": "healthy", 
-                  "environment": "{{ environment }}",
+                  "environment": "{{ app_environment | default(environment) }}",
                   "service": "zentravision"
               })
         owner: "{{ app_user }}"
@@ -246,7 +244,7 @@
     - reload systemd
     - restart zentravision
 
-# Nginx configuration (HTTP first, HTTPS will be configured by certbot)
+# Nginx configuration (HTTP ONLY - NO SSL)
 - name: Create Nginx site configuration
   template:
     src: nginx.conf.j2
@@ -293,54 +291,7 @@
     delay: 5
     timeout: 30
 
-# SSL Configuration (only if ssl_enabled is true)
-- name: Configure SSL with Let's Encrypt
-  block:
-    - name: Check if SSL certificate already exists
-      stat:
-        path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
-      register: ssl_cert_check
-
-    - name: Obtain SSL certificate with certbot
-      command: >
-        certbot --nginx 
-        -d {{ domain_name }}
-        --non-interactive 
-        --agree-tos 
-        --email {{ admin_email }}
-        --redirect
-      when: not ssl_cert_check.stat.exists
-      register: certbot_result
-
-    - name: Show certbot result
-      debug:
-        var: certbot_result
-      when: certbot_result is defined
-
-    - name: Test SSL certificate
-      uri:
-        url: "https://{{ domain_name }}"
-        method: HEAD
-        status_code: [200, 302, 301]
-        timeout: 10
-      ignore_errors: yes
-      register: ssl_test
-
-    - name: Show SSL test result
-      debug:
-        msg: "SSL test for https://{{ domain_name }}: {{ 'SUCCESS' if ssl_test.status is defined else 'FAILED' }}"
-
-    - name: Setup automatic certificate renewal
-      cron:
-        name: "Renew Let's Encrypt certificates"
-        minute: "0"
-        hour: "12"
-        job: "/usr/bin/certbot renew --quiet"
-        user: root
-
-  when: ssl_enabled | default(false)
-
-# Final verification
+# Final verification (HTTP ONLY)
 - name: Verify application health
   uri:
     url: "http://127.0.0.1:8000/"
@@ -349,3 +300,28 @@
   retries: 3
   delay: 5
   ignore_errors: yes
+
+# Display success message
+- name: Display deployment info
+  debug:
+    msg: |
+      ========================================
+      🎉 Zentravision Deployed Successfully (HTTP Only)!
+      ========================================
+      
+      🌐 Application URL: http://{{ domain_name }}
+      🔧 Admin Panel: http://{{ domain_name }}/admin/
+      📍 IP Access: http://{{ ansible_host }}:8000/
+      
+      ⚠️  SSL/HTTPS is DISABLED to avoid Let's Encrypt rate limits
+      💡 You can configure SSL manually later if needed
+      
+      🔑 Admin Credentials:
+      - Username: {{ django_superuser_username }}
+      - Password: {{ django_superuser_password }}
+      
+      📋 Next Steps:
+      1. Configure DNS: {{ domain_name }} → {{ ansible_host }}
+      2. Test HTTP access: http://{{ domain_name }}
+      3. Login to admin panel
+      4. Upload test PDF
