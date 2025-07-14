@@ -12,8 +12,8 @@ gunicorn_workers: 2
 gunicorn_timeout: 120
 gunicorn_max_requests: 500
 
-# Celery settings - SIN DUPLICADOS
-celery_worker_concurrency: 1
+# Celery settings
+celery_worker_concurrency: 3
 celery_memory_limit: "100M"
 celery_log_level: "info"
 celery_soft_time_limit: 150
