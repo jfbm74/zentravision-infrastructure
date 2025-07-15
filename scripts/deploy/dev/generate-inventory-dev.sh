@@ -52,7 +52,7 @@ zentravision:
     monitoring_enabled: true
     vault_grafana_prometheus_url: "https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push"
     vault_grafana_username: "2353449"
-    vault_grafana_password: "***REMOVED***"
+    vault_grafana_password: "{{ lookup('env', 'GRAFANA_API_TOKEN') }}"
     vault_monitoring_db_password: "monitoring123"
 EOFDEV
 
