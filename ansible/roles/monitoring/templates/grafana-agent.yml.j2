@@ -1,10 +1,15 @@
+---
+# ============================================================================
+# ARCHIVO: ansible/roles/monitoring/templates/grafana-agent.yml.j2
+# Configuración de Grafana Agent con Google Secret Manager integration
+# ============================================================================
+
 server:
   log_level: info
-  http_listen_port: 12345
 
 metrics:
   global:
-    scrape_interval: {{ scrape_interval }}
+    scrape_interval: {{ scrape_interval | default('15s') }}
     external_labels:
       environment: {{ app_environment | default(environment) }}
       instance: {{ inventory_hostname }}
@@ -14,10 +19,11 @@ metrics:
   - name: zentravision-metrics
     
     remote_write:
-    - url: {{ grafana_cloud_prometheus_url }}
+    - url: {{ vault_grafana_prometheus_url }}
       basic_auth:
-        username: {{ grafana_cloud_username }}
-        password: {{ grafana_cloud_password }}
+        username: {{ vault_grafana_username }}
+        # Password será obtenido dinámicamente del secret
+        password: "{{ grafana_api_token_value }}"
       queue_config:
         max_samples_per_send: 1000
         max_shards: 10
@@ -27,26 +33,30 @@ metrics:
     # Node metrics (sistema)
     - job_name: 'node'
       static_configs:
-      - targets: ['localhost:{{ node_exporter_port }}']
+      - targets: ['localhost:{{ node_exporter_port | default(9100) }}']
         labels:
           service: 'system'
           app: 'zentravision'
           
-    # PostgreSQL metrics
+    # PostgreSQL metrics (si está configurado)
+    {% if postgres_exporter_port is defined %}
     - job_name: 'postgresql'
       static_configs:
       - targets: ['localhost:{{ postgres_exporter_port }}']
         labels:
           service: 'postgresql'
           app: 'zentravision'
+    {% endif %}
           
-    # Redis metrics
+    # Redis metrics (si está configurado)
+    {% if redis_exporter_port is defined %}
     - job_name: 'redis'
       static_configs:
       - targets: ['localhost:{{ redis_exporter_port }}']
         labels:
           service: 'redis'
           app: 'zentravision'
+    {% endif %}
           
     # Django metrics
     - job_name: 'django'

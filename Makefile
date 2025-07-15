@@ -282,3 +282,131 @@ logs-monitoring-uat: ## Ver logs de monitoreo en UAT
 		exit 1; \
 	fi; \
 	ssh zentravision@$$INSTANCE_IP 'sudo journalctl -u grafana-agent -f'
+
+
+# ============================================================================
+# COMANDOS DE MONITOREO CON GOOGLE SECRET MANAGER
+# Agregar al final del Makefile existente
+# ============================================================================
+
+# Configurar Grafana API Token
+configure-grafana-dev: ## Configurar Grafana API Token para DEV
+	./scripts/configure-grafana-token.sh zentraflow dev
+
+configure-grafana-uat: ## Configurar Grafana API Token para UAT
+	./scripts/configure-grafana-token.sh zentraflow uat
+
+configure-grafana-prod: ## Configurar Grafana API Token para PROD
+	./scripts/configure-grafana-token.sh zentraflow prod
+
+# Verificar secrets existentes
+check-secrets-dev: ## Verificar secrets de DEV
+	@echo "🔍 Verificando secrets para DEV..."
+	@echo "=================================="
+	@gcloud secrets describe zentraflow-dev-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
+	@gcloud secrets describe zentraflow-dev-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
+	@gcloud secrets describe zentraflow-dev-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
+	@gcloud secrets describe zentraflow-dev-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
+
+check-secrets-uat: ## Verificar secrets de UAT
+	@echo "🔍 Verificando secrets para UAT..."
+	@echo "=================================="
+	@gcloud secrets describe zentraflow-uat-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
+	@gcloud secrets describe zentraflow-uat-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
+	@gcloud secrets describe zentraflow-uat-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
+	@gcloud secrets describe zentraflow-uat-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
+
+check-secrets-prod: ## Verificar secrets de PROD
+	@echo "🔍 Verificando secrets para PROD..."
+	@echo "==================================="
+	@gcloud secrets describe zentraflow-prod-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
+	@gcloud secrets describe zentraflow-prod-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
+	@gcloud secrets describe zentraflow-prod-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
+	@gcloud secrets describe zentraflow-prod-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
+
+# Comandos completos de despliegue con verificación de secrets
+deploy-monitoring-dev-complete: ## Desplegar monitoreo DEV (con verificación de secrets)
+	@echo "🔍 Verificando secrets antes del despliegue..."
+	@make check-secrets-dev
+	@echo ""
+	@echo "¿Todos los secrets están OK? Si falta Grafana token, ejecuta 'make configure-grafana-dev' primero"
+	@echo "¿Continuar con el despliegue? (y/N)"
+	@read confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo "🔄 Generando inventario dinámico para DEV..."
+	./scripts/deploy/dev/generate-inventory-dev.sh
+	@echo "📊 Desplegando monitoreo en DEV..."
+	cd ansible && ansible-playbook -i inventories/dev playbooks/site.yml --tags monitoring
+
+deploy-monitoring-uat-complete: ## Desplegar monitoreo UAT (con verificación de secrets)
+	@echo "🔍 Verificando secrets antes del despliegue..."
+	@make check-secrets-uat
+	@echo ""
+	@echo "¿Todos los secrets están OK? Si falta Grafana token, ejecuta 'make configure-grafana-uat' primero"
+	@echo "¿Continuar con el despliegue? (y/N)"
+	@read confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo "🔄 Generando inventario dinámico para UAT..."
+	./scripts/deploy/uat/generate-inventory-uat.sh
+	@echo "📊 Desplegando monitoreo en UAT..."
+	cd ansible && ansible-playbook -i inventories/uat playbooks/site.yml --tags monitoring
+
+# Test de conectividad con Grafana Cloud
+test-grafana-connectivity-dev: ## Test conectividad Grafana Cloud DEV
+	@echo "🧪 Probando conectividad con Grafana Cloud (DEV)..."
+	@TOKEN=$$(gcloud secrets versions access latest --secret="zentraflow-dev-grafana-token" 2>/dev/null || echo "ERROR"); \
+	if [ "$$TOKEN" = "ERROR" ]; then \
+		echo "❌ No se pudo obtener token de Grafana. Ejecuta: make configure-grafana-dev"; \
+		exit 1; \
+	fi; \
+	curl -s -o /dev/null -w "Status: %{http_code}\n" \
+		-X POST \
+		-H "Authorization: Basic $$(echo -n "2353449:$$TOKEN" | base64)" \
+		-H "Content-Type: application/x-protobuf" \
+		--data "" \
+		"https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push" || echo "Test completado"
+
+# Setup completo de monitoreo
+setup-monitoring-dev: ## Setup completo de monitoreo para DEV
+	@echo "🚀 Setup completo de monitoreo para DEV"
+	@echo "======================================="
+	@echo "1. Verificando secrets existentes..."
+	@make check-secrets-dev || true
+	@echo ""
+	@echo "2. ¿Necesitas configurar Grafana token? (y/N)"
+	@read need_grafana && [ "$$need_grafana" = "y" ] && make configure-grafana-dev || true
+	@echo ""
+	@echo "3. Desplegando monitoreo..."
+	@make deploy-monitoring-dev-complete
+
+setup-monitoring-uat: ## Setup completo de monitoreo para UAT
+	@echo "🚀 Setup completo de monitoreo para UAT"
+	@echo "======================================="
+	@echo "1. Verificando secrets existentes..."
+	@make check-secrets-uat || true
+	@echo ""
+	@echo "2. ¿Necesitas configurar Grafana token? (y/N)"
+	@read need_grafana && [ "$$need_grafana" = "y" ] && make configure-grafana-uat || true
+	@echo ""
+	@echo "3. Desplegando monitoreo..."
+	@make deploy-monitoring-uat-complete
+
+# Troubleshooting
+debug-grafana-config-dev: ## Debug configuración Grafana DEV
+	@INSTANCE_IP=$$(cat .last-dev-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener IP de DEV"; \
+		exit 1; \
+	fi; \
+	echo "🔍 Debugging Grafana Agent en DEV ($$INSTANCE_IP)"; \
+	ssh zentravision@$$INSTANCE_IP 'bash -s' << 'REMOTE_SCRIPT'
+		echo "=== Configuración Grafana Agent ==="
+		sudo cat /etc/grafana-agent/grafana-agent.yml | head -20
+		echo ""
+		echo "=== Estado del Servicio ==="
+		sudo systemctl status grafana-agent
+		echo ""
+		echo "=== Últimos Logs ==="
+		sudo journalctl -u grafana-agent --since "5 minutes ago" --no-pager
+		echo ""
+		echo "=== Test de Configuración ==="
+		sudo /usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --config.validate
+	REMOTE_SCRIPT

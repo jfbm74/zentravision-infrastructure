@@ -1,0 +1,2 @@
+5daf92ec9fe996fd108c9bb54146afcaf3ab5428 46f743d17e4f6c1e2d4f210e7cb7d83c9b567114 generate-inventory-dev.sh
+bbf4ddf5b3a2f719e4d2498b3363888f15b49a03 f80c43441c436b2adeb44915a04a4ea8aecbdc1e hosts.yml

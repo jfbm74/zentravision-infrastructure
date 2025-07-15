@@ -1,15 +1,88 @@
 ---
-- name: Download Grafana Agent
+# ============================================================================
+# ARCHIVO: ansible/roles/monitoring/tasks/grafana_agent.yml
+# Tasks para Grafana Agent con integración de Google Secret Manager
+# ============================================================================
+
+- name: Check if Grafana API Token secret exists
+  command: gcloud secrets describe "{{ gcp_project_id }}-{{ app_environment }}-grafana-token"
+  register: grafana_secret_check
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail if Grafana API Token secret doesn't exist
+  fail:
+    msg: |
+      ❌ Grafana API Token secret no encontrado: {{ gcp_project_id }}-{{ app_environment }}-grafana-token
+      
+      📝 Para crear el secret, ejecuta:
+      ./scripts/configure-grafana-token.sh {{ gcp_project_id }} {{ app_environment }}
+      
+      O manualmente:
+      echo -n "tu-grafana-token" | gcloud secrets create {{ gcp_project_id }}-{{ app_environment }}-grafana-token --data-file=-
+  when: grafana_secret_check.rc != 0
+
+- name: Retrieve Grafana API Token from Google Secret Manager
+  command: >
+    gcloud secrets versions access latest 
+    --secret="{{ gcp_project_id }}-{{ app_environment }}-grafana-token"
+  register: grafana_token_result
+  changed_when: false
+  no_log: true  # No mostrar el token en logs
+
+- name: Set Grafana API Token variable
+  set_fact:
+    grafana_api_token_value: "{{ grafana_token_result.stdout }}"
+  no_log: true  # No mostrar el token en logs
+
+- name: Verify Grafana API Token format
+  fail:
+    msg: "❌ Error: Grafana API Token no tiene el formato esperado (debe empezar con 'glc_')"
+  when: not grafana_api_token_value.startswith('glc_')
+
+- name: Display Grafana Cloud configuration (without token)
+  debug:
+    msg: |
+      📊 Configuración Grafana Cloud
+      =============================
+      URL: {{ vault_grafana_prometheus_url }}
+      Usuario: {{ vault_grafana_username }}
+      Token: {{ grafana_api_token_value[:10] }}*** (obtenido de Secret Manager)
+      Secret: {{ gcp_project_id }}-{{ app_environment }}-grafana-token
+
+- name: Stop existing Grafana Agent service if exists
+  systemd:
+    name: grafana-agent
+    state: stopped
+  ignore_errors: yes
+
+- name: Remove existing Grafana Agent configuration (cleanup)
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/grafana-agent/grafana-agent.yml
+    - /tmp/grafana-agent.zip
+    - /tmp/grafana-agent-linux-amd64
+  ignore_errors: yes
+
+- name: Download Grafana Agent v0.38.1
   get_url:
     url: "https://github.com/grafana/agent/releases/download/{{ grafana_agent_version }}/grafana-agent-linux-amd64.zip"
     dest: "/tmp/grafana-agent.zip"
     timeout: 60
+    mode: '0644'
+  retries: 3
+  delay: 10
 
 - name: Extract Grafana Agent
   unarchive:
     src: "/tmp/grafana-agent.zip"
     dest: "/tmp"
     remote_src: yes
+    creates: "/tmp/grafana-agent-linux-amd64"
 
 - name: Install Grafana Agent binary
   copy:
@@ -19,21 +92,53 @@
     owner: root
     group: root
     remote_src: yes
+  notify: restart grafana-agent
 
-- name: Create Grafana Agent configuration
+- name: Verify Grafana Agent binary installation
+  command: /usr/local/bin/grafana-agent --version
+  register: grafana_agent_version_check
+  changed_when: false
+  failed_when: grafana_agent_version_check.rc != 0
+
+- name: Display Grafana Agent version
+  debug:
+    msg: "Grafana Agent installed: {{ grafana_agent_version_check.stdout_lines[0] }}"
+
+- name: Create Grafana Agent configuration with Secret Manager token
   template:
     src: grafana-agent.yml.j2
     dest: /etc/grafana-agent/grafana-agent.yml
     owner: monitoring
     group: monitoring
-    mode: '0644'
+    mode: '0600'  # Modo restrictivo para proteger el token
+    backup: yes
   notify: restart grafana-agent
 
-- name: Create Grafana Agent service
+- name: Validate Grafana Agent configuration syntax
+  command: /usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --config.validate
+  register: config_validation
+  changed_when: false
+  failed_when: config_validation.rc != 0
+
+- name: Display configuration validation result
+  debug:
+    msg: "✅ Grafana Agent configuration is valid"
+  when: config_validation.rc == 0
+
+- name: Create Grafana Agent systemd service
   template:
     src: grafana-agent.service.j2
     dest: /etc/systemd/system/grafana-agent.service
-  notify: restart grafana-agent
+    owner: root
+    group: root
+    mode: '0644'
+  notify: 
+    - reload systemd
+    - restart grafana-agent
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
 
 - name: Start and enable Grafana Agent
   systemd:
@@ -41,3 +146,80 @@
     state: started
     enabled: yes
     daemon_reload: yes
+
+- name: Wait for Grafana Agent to start
+  wait_for:
+    port: 12345
+    host: localhost
+    delay: 5
+    timeout: 30
+  ignore_errors: yes
+
+- name: Verify Grafana Agent is running
+  command: systemctl is-active grafana-agent
+  register: grafana_agent_status
+  retries: 3
+  delay: 5
+  until: grafana_agent_status.stdout == "active"
+  changed_when: false
+
+- name: Test Grafana Agent metrics endpoint
+  uri:
+    url: "http://localhost:12345/metrics"
+    method: GET
+    status_code: 200
+  register: metrics_test
+  retries: 3
+  delay: 5
+  ignore_errors: yes
+
+- name: Test connectivity to Grafana Cloud
+  uri:
+    url: "{{ vault_grafana_prometheus_url }}"
+    method: POST
+    headers:
+      Authorization: "Basic {{ (vault_grafana_username + ':' + grafana_api_token_value) | b64encode }}"
+      Content-Type: "application/x-protobuf"
+    body: ""
+    status_code: [200, 400, 405]  # 405 es OK para test sin datos
+  register: grafana_cloud_test
+  ignore_errors: yes
+  no_log: true  # No mostrar headers con token
+
+- name: Display Grafana Agent deployment status
+  debug:
+    msg: |
+      🎉 Grafana Agent con Secret Manager
+      =================================
+      Service Status: {{ grafana_agent_status.stdout }}
+      Metrics Endpoint: {{ 'OK' if metrics_test.status == 200 else 'Failed' }}
+      Grafana Cloud: {{ 'OK' if grafana_cloud_test.status in [200, 400, 405] else 'Failed' }}
+      
+      🔐 Secret Manager Integration:
+      - Secret: {{ gcp_project_id }}-{{ app_environment }}-grafana-token
+      - Token: {{ grafana_api_token_value[:10] }}*** (últimos caracteres ocultos)
+      
+      📊 Monitoring Endpoints:
+      - Grafana Agent: http://localhost:12345/metrics
+      - Node Exporter: http://localhost:{{ node_exporter_port | default(9100) }}/metrics
+      - Django App: http://localhost:8000/metrics/
+      
+      🔧 Management Commands:
+      - Status: sudo systemctl status grafana-agent
+      - Logs: sudo journalctl -u grafana-agent -f
+      - Restart: sudo systemctl restart grafana-agent
+      - Config Test: /usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --config.validate
+
+- name: Clean up temporary files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/grafana-agent.zip
+    - /tmp/grafana-agent-linux-amd64
+  ignore_errors: yes
+
+- name: Clear Grafana API Token from memory
+  set_fact:
+    grafana_api_token_value: ""
+  no_log: true

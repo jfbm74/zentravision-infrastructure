@@ -1,4 +1,19 @@
 ---
+# ============================================================================
+# ARCHIVO: ansible/roles/monitoring/tasks/main.yml
+# Task principal del role de monitoreo con Grafana Agent corregido
+# ============================================================================
+
+- name: Verify monitoring is enabled
+  debug:
+    msg: "🔍 Iniciando configuración de monitoreo para {{ app_environment | default(environment) }}"
+  when: monitoring_enabled | default(true)
+
+- name: Skip monitoring configuration
+  debug:
+    msg: "⏭️  Monitoreo deshabilitado, saltando configuración"
+  when: not (monitoring_enabled | default(true))
+
 - name: Create monitoring user
   user:
     name: monitoring
@@ -6,6 +21,7 @@
     shell: /bin/false
     home: /var/lib/monitoring
     create_home: yes
+  when: monitoring_enabled | default(true)
 
 - name: Create monitoring directories
   file:
@@ -20,6 +36,7 @@
     - /var/lib/monitoring/wal
     - /var/log/monitoring
     - /opt/monitoring/exporters
+  when: monitoring_enabled | default(true)
 
 - name: Install required packages for monitoring
   apt:
@@ -29,46 +46,140 @@
       - unzip
       - python3-psutil
     state: present
+    update_cache: yes
+  when: monitoring_enabled | default(true)
 
 - name: Install Node Exporter
   include_tasks: node_exporter.yml
   tags: ['node_exporter']
+  when: monitoring_enabled | default(true)
 
 - name: Install PostgreSQL Exporter
   include_tasks: postgres_exporter.yml
   tags: ['postgres_exporter']
+  when: monitoring_enabled | default(true)
 
 - name: Install Redis Exporter
   include_tasks: redis_exporter.yml
   tags: ['redis_exporter']
+  when: monitoring_enabled | default(true)
 
 - name: Install Nginx Exporter  
   include_tasks: nginx_exporter.yml
   tags: ['nginx_exporter']
+  when: monitoring_enabled | default(true)
 
 - name: Configure Nginx for metrics
   include_tasks: nginx_metrics.yml
   tags: ['nginx_metrics']
-
-- name: Install Grafana Agent
-  include_tasks: grafana_agent.yml
-  tags: ['grafana_agent']
+  when: monitoring_enabled | default(true)
 
 - name: Configure Django metrics endpoint
   include_tasks: django_metrics.yml
   tags: ['django_metrics']
+  when: monitoring_enabled | default(true)
 
-- name: Display monitoring status
+- name: Install and configure Grafana Agent (CORREGIDO)
+  include_tasks: grafana_agent.yml
+  tags: ['grafana_agent']
+  when: monitoring_enabled | default(true)
+
+- name: Verify all monitoring services are running
+  command: systemctl is-active "{{ item }}"
+  register: service_status
+  loop:
+    - node_exporter
+    - grafana-agent
+  failed_when: false
+  changed_when: false
+  when: monitoring_enabled | default(true)
+
+- name: Display monitoring services status
   debug:
     msg: |
-      📊 Monitoreo Zentravision Configurado
-      ===================================
-      🔗 Endpoints de Métricas:
-      - Node: http://localhost:{{ node_exporter_port }}/metrics
-      - PostgreSQL: http://localhost:{{ postgres_exporter_port }}/metrics  
-      - Redis: http://localhost:{{ redis_exporter_port }}/metrics
-      - Nginx: http://localhost:{{ nginx_exporter_port }}/metrics
-      - Django: http://localhost:8000/metrics/
-      - Grafana Agent: http://localhost:12345/metrics
+      📊 Estado de Servicios de Monitoreo
+      ==================================
+      {% for result in service_status.results %}
+      {{ result.item }}: {{ result.stdout | default('unknown') }}
+      {% endfor %}
+  when: 
+    - monitoring_enabled | default(true)
+    - service_status is defined
+
+- name: Final monitoring verification
+  block:
+    - name: Test Grafana Agent metrics endpoint
+      uri:
+        url: "http://localhost:12345/metrics"
+        method: GET
+        status_code: 200
+      register: agent_health
+      retries: 3
+      delay: 5
+
+    - name: Test Node Exporter metrics endpoint
+      uri:
+        url: "http://localhost:{{ node_exporter_port | default(9100) }}/metrics"
+        method: GET
+        status_code: 200
+      register: node_health
+      retries: 3
+      delay: 5
+
+    - name: Test Django metrics endpoint
+      uri:
+        url: "http://localhost:8000/metrics/"
+        method: GET
+        status_code: 200
+      register: django_health
+      retries: 3
+      delay: 5
+      ignore_errors: yes
+
+  rescue:
+    - name: Display monitoring setup warnings
+      debug:
+        msg: |
+          ⚠️  Algunos endpoints de métricas no responden
+          Esto es normal durante la configuración inicial
+          Los servicios pueden tardar unos minutos en estar listos
+  
+  when: monitoring_enabled | default(true)
+
+- name: Display comprehensive monitoring status
+  debug:
+    msg: |
+      🎯 Zentravision Monitoring Configurado
+      ====================================
       
-      🎯 Grafana Cloud: https://zentratek.grafana.net/
+      ✅ Servicios Instalados:
+      - Grafana Agent v{{ grafana_agent_version | default('0.38.1') }}
+      - Node Exporter 
+      - Django Metrics Endpoint
+      
+      🔗 Endpoints de Métricas:
+      - Grafana Agent: http://localhost:12345/metrics
+      - Node Exporter: http://localhost:{{ node_exporter_port | default(9100) }}/metrics
+      - Django App: http://localhost:8000/metrics/
+      
+      📊 Grafana Cloud:
+      - URL: {{ vault_grafana_prometheus_url }}
+      - Usuario: {{ vault_grafana_username }}
+      - Dashboard: https://zentratek.grafana.net/
+      
+      🔧 Comandos de Gestión:
+      - Ver estado: sudo systemctl status grafana-agent node_exporter
+      - Ver logs: sudo journalctl -u grafana-agent -f
+      - Reiniciar: sudo systemctl restart grafana-agent
+      - Test config: /usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --config.validate
+      
+      📝 Archivos de Configuración:
+      - Grafana Agent: /etc/grafana-agent/grafana-agent.yml
+      - Logs: /var/log/monitoring/
+      - WAL Directory: /var/lib/monitoring/wal
+      
+      🏷️  Labels de Métricas:
+      - Environment: {{ app_environment | default(environment) }}
+      - Instance: {{ inventory_hostname }}
+      - Project: zentravision
+  when: monitoring_enabled | default(true)

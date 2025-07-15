@@ -1,19 +1,51 @@
+# ============================================================================
+# ARCHIVO: ansible/roles/monitoring/templates/grafana-agent.service.j2
+# Servicio systemd para Grafana Agent con configuración optimizada
+# ============================================================================
+
 [Unit]
 Description=Grafana Agent
+Documentation=https://grafana.com/docs/agent/
 Wants=network-online.target
 After=network-online.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
 
 [Service]
 User=monitoring
 Group=monitoring
 Type=simple
+Restart=on-failure
+RestartSec=5s
+
+# Comando de ejecución con validación de configuración
+ExecStartPre=/usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --config.validate
 ExecStart=/usr/local/bin/grafana-agent \
     --config.file=/etc/grafana-agent/grafana-agent.yml \
     --metrics.wal-directory=/var/lib/monitoring/wal \
     --server.log.level=info
 
-Restart=always
-RestartSec=10
+# Configuración de recursos
+LimitNOFILE=1000000
+LimitNPROC=1000000
+
+# Variables de entorno
+Environment=HOME=/var/lib/monitoring
+
+# Directorios de trabajo
+WorkingDirectory=/var/lib/monitoring
+
+# Configuración de logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grafana-agent
+
+# Configuración de seguridad
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/monitoring
 
 [Install]
 WantedBy=multi-user.target
