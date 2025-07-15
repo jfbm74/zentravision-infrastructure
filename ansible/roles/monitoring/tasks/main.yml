@@ -1,0 +1,74 @@
+---
+- name: Create monitoring user
+  user:
+    name: monitoring
+    system: yes
+    shell: /bin/false
+    home: /var/lib/monitoring
+    create_home: yes
+
+- name: Create monitoring directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: monitoring
+    group: monitoring
+    mode: '0755'
+  loop:
+    - /etc/grafana-agent
+    - /var/lib/monitoring
+    - /var/lib/monitoring/wal
+    - /var/log/monitoring
+    - /opt/monitoring/exporters
+
+- name: Install required packages for monitoring
+  apt:
+    name:
+      - curl
+      - wget
+      - unzip
+      - python3-psutil
+    state: present
+
+- name: Install Node Exporter
+  include_tasks: node_exporter.yml
+  tags: ['node_exporter']
+
+- name: Install PostgreSQL Exporter
+  include_tasks: postgres_exporter.yml
+  tags: ['postgres_exporter']
+
+- name: Install Redis Exporter
+  include_tasks: redis_exporter.yml
+  tags: ['redis_exporter']
+
+- name: Install Nginx Exporter  
+  include_tasks: nginx_exporter.yml
+  tags: ['nginx_exporter']
+
+- name: Configure Nginx for metrics
+  include_tasks: nginx_metrics.yml
+  tags: ['nginx_metrics']
+
+- name: Install Grafana Agent
+  include_tasks: grafana_agent.yml
+  tags: ['grafana_agent']
+
+- name: Configure Django metrics endpoint
+  include_tasks: django_metrics.yml
+  tags: ['django_metrics']
+
+- name: Display monitoring status
+  debug:
+    msg: |
+      📊 Monitoreo Zentravision Configurado
+      ===================================
+      🔗 Endpoints de Métricas:
+      - Node: http://localhost:{{ node_exporter_port }}/metrics
+      - PostgreSQL: http://localhost:{{ postgres_exporter_port }}/metrics  
+      - Redis: http://localhost:{{ redis_exporter_port }}/metrics
+      - Nginx: http://localhost:{{ nginx_exporter_port }}/metrics
+      - Django: http://localhost:8000/metrics/
+      - Grafana Agent: http://localhost:12345/metrics
+      
+      🎯 Grafana Cloud: https://zentratek.grafana.net/

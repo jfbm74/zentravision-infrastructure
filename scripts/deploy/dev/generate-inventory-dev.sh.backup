@@ -18,7 +18,7 @@ echo "✅ IP obtenida: $INSTANCE_IP"
 # Crear directorio si no existe
 mkdir -p ../../../ansible/inventories/dev
 
-# Generar inventario para DEV dinámicamente CON VARIABLES DE MONITOREO
+# Generar inventario para DEV dinámicamente - USING app_environment instead of environment
 cat > ../../../ansible/inventories/dev/hosts.yml << EOFDEV
 ---
 zentravision:
@@ -47,20 +47,12 @@ zentravision:
     debug_mode: true
     ssl_enabled: true
     backup_enabled: false
-    
-    # Monitoring configuration
-    monitoring_enabled: true
-    vault_grafana_prometheus_url: "https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push"
-    vault_grafana_username: "2353449"
-    vault_grafana_password: "***REMOVED***"
-    vault_monitoring_db_password: "monitoring123"
 EOFDEV
 
 echo "✅ Inventario DEV generado: ../../../ansible/inventories/dev/hosts.yml"
 echo "📍 Instance IP: $INSTANCE_IP"
 echo "🌐 Dominio: dev-zentravision.zentratek.com"
 echo "👤 Usuario SSH: zentravision"
-echo "📊 Monitoreo: Variables incluidas"
 echo ""
 echo "⚠️  IMPORTANTE: Configura el DNS para que dev-zentravision.zentratek.com apunte a $INSTANCE_IP"
 

@@ -1,0 +1,20 @@
+---
+# Grafana Cloud Configuration
+grafana_cloud_prometheus_url: "{{ vault_grafana_prometheus_url }}"
+grafana_cloud_username: "{{ vault_grafana_username }}"
+grafana_cloud_password: "{{ vault_grafana_password }}"
+
+# Monitoring settings
+monitoring_enabled: true
+grafana_agent_version: "v0.38.1"
+scrape_interval: "15s"
+
+# Exporter versions
+node_exporter_version: "1.7.0"
+node_exporter_port: 9100
+postgres_exporter_version: "0.15.0"
+postgres_exporter_port: 9187
+redis_exporter_version: "1.55.0"
+redis_exporter_port: 9121
+nginx_exporter_version: "0.11.0"
+nginx_exporter_port: 9113

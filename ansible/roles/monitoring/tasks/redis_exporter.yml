@@ -1,0 +1,4 @@
+---
+- name: Debug redis_exporter placeholder
+  debug:
+    msg: "redis_exporter configurado como placeholder (TODO: implementar)"

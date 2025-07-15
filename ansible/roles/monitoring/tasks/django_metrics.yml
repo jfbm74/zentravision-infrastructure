@@ -1,0 +1,41 @@
+---
+- name: Create Django metrics view file
+  template:
+    src: django_metrics.py.j2
+    dest: "{{ app_home }}/app/metrics_views.py"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0644'
+
+- name: Install psutil in Django virtual environment
+  pip:
+    name: psutil
+    virtualenv: "{{ app_home }}/venv"
+  become_user: "{{ app_user }}"
+
+- name: Check if Django URLs file exists
+  stat:
+    path: "{{ app_home }}/app/{{ app_name }}/urls.py"
+  register: urls_file
+
+- name: Add metrics URL to Django URLs
+  lineinfile:
+    path: "{{ app_home }}/app/{{ app_name }}/urls.py"
+    insertafter: "from django.urls import path"
+    line: "from metrics_views import metrics_view"
+    regexp: "^from metrics_views import"
+  when: urls_file.stat.exists
+
+- name: Add metrics path to urlpatterns
+  lineinfile:
+    path: "{{ app_home }}/app/{{ app_name }}/urls.py"
+    insertafter: "urlpatterns = \\["
+    line: "    path('metrics/', metrics_view, name='metrics'),"
+    regexp: ".*path\\('metrics/'.*"
+  when: urls_file.stat.exists
+
+- name: Restart Django to load metrics endpoint
+  systemd:
+    name: "{{ app_name }}"
+    state: restarted
+  ignore_errors: yes

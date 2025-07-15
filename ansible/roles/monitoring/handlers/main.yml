@@ -1,0 +1,30 @@
+---
+- name: restart node_exporter
+  systemd:
+    name: node_exporter
+    state: restarted
+
+- name: restart postgres_exporter
+  systemd:
+    name: postgres_exporter
+    state: restarted
+
+- name: restart redis_exporter
+  systemd:
+    name: redis_exporter
+    state: restarted
+
+- name: restart nginx_exporter
+  systemd:
+    name: nginx_exporter
+    state: restarted
+
+- name: restart grafana-agent
+  systemd:
+    name: grafana-agent
+    state: restarted
+
+- name: restart nginx
+  systemd:
+    name: nginx
+    state: restarted

@@ -198,3 +198,87 @@ configure-ssl: ## Configurar SSL para un ambiente específico
 	elif [ "$env" = "uat" ]; then ./scripts/deploy/uat/check-ssl.sh; \
 	elif [ "$env" = "prod" ]; then ./scripts/deploy/prod/check-dns.sh; \
 	else echo "Ambiente no válido"; fi
+
+
+# ============================================================================
+# COMANDOS DE MONITOREO - Agregar al final del Makefile
+# ============================================================================
+
+# Comandos de monitoreo
+deploy-monitoring-dev: ## Desplegar solo monitoreo (DEV)
+	@echo "🔄 Generando inventario dinámico para DEV..."
+	./scripts/deploy/dev/generate-inventory-dev.sh
+	@echo "📊 Desplegando monitoreo en DEV..."
+	cd ansible && ansible-playbook -i inventories/dev playbooks/site.yml --tags monitoring
+
+deploy-monitoring-uat: ## Desplegar solo monitoreo (UAT)
+	@echo "🔄 Generando inventario dinámico para UAT..."
+	./scripts/deploy/uat/generate-inventory-uat.sh
+	@echo "📊 Desplegando monitoreo en UAT..."
+	cd ansible && ansible-playbook -i inventories/uat playbooks/site.yml --tags monitoring
+
+deploy-monitoring-prod: ## Desplegar solo monitoreo (PROD)
+	@echo "⚠️  Desplegando monitoreo en PRODUCCIÓN"
+	@echo "¿Continuar? (Ctrl+C para cancelar, Enter para continuar)"
+	@read dummy
+	@echo "🔄 Generando inventario dinámico para PROD..."
+	./scripts/deploy/prod/generate-inventory-prod.sh
+	@echo "📊 Desplegando monitoreo en PROD..."
+	cd ansible && ansible-playbook -i inventories/prod playbooks/site.yml --tags monitoring
+
+check-monitoring: ## Verificar estado del monitoreo
+	@echo "🔍 Verificando servicios de monitoreo..."
+	@ENV=${1:-dev}; \
+	INSTANCE_IP=$$(cat .last-$$ENV-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener la IP de $$ENV"; \
+		exit 1; \
+	fi; \
+	echo "📍 Verificando monitoreo en $$ENV ($$INSTANCE_IP)"; \
+	ssh zentravision@$$INSTANCE_IP 'bash -s' << 'REMOTE_SCRIPT'
+		echo "=== Servicios de Monitoreo ==="
+		for service in grafana-agent node_exporter postgres_exporter redis_exporter; do
+			if systemctl is-active --quiet $$service 2>/dev/null; then
+				echo "✅ $$service: Activo"
+			else
+				echo "❌ $$service: Inactivo"
+			fi
+		done
+		echo ""
+		echo "=== Test de Métricas ==="
+		echo "Django Metrics:"
+		curl -s http://localhost:8000/metrics/ | head -3 || echo "❌ Error"
+		echo "Node Exporter:"
+		curl -s http://localhost:9100/metrics | head -3 || echo "❌ Error"
+	REMOTE_SCRIPT
+
+setup-grafana: ## Configurar monitoreo de Grafana Cloud
+	@echo "Ambientes disponibles: dev, uat, prod"
+	@read -p "¿Para qué ambiente? " env; \
+	./scripts/monitoring/setup-grafana-monitoring.sh $$env
+
+test-metrics-dev: ## Probar métricas en DEV
+	@INSTANCE_IP=$$(cat .last-dev-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener IP de DEV"; \
+		exit 1; \
+	fi; \
+	echo "🧪 Probando métricas en DEV ($$INSTANCE_IP)"; \
+	echo "Django: $$(curl -s -o /dev/null -w '%{http_code}' http://dev-zentravision.zentratek.com/metrics/ || echo 'Error')"; \
+	ssh zentravision@$$INSTANCE_IP 'curl -s http://localhost:9100/metrics | grep -c node_' 2>/dev/null && echo "✅ Node Exporter OK" || echo "❌ Node Exporter FAIL"
+
+logs-monitoring-dev: ## Ver logs de monitoreo en DEV
+	@INSTANCE_IP=$$(cat .last-dev-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener IP de DEV"; \
+		exit 1; \
+	fi; \
+	ssh zentravision@$$INSTANCE_IP 'sudo journalctl -u grafana-agent -f'
+
+logs-monitoring-uat: ## Ver logs de monitoreo en UAT
+	@INSTANCE_IP=$$(cat .last-uat-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener IP de UAT"; \
+		exit 1; \
+	fi; \
+	ssh zentravision@$$INSTANCE_IP 'sudo journalctl -u grafana-agent -f'

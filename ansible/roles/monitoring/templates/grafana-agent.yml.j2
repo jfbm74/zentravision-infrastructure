@@ -1,0 +1,67 @@
+server:
+  log_level: info
+  http_listen_port: 12345
+
+metrics:
+  global:
+    scrape_interval: {{ scrape_interval }}
+    external_labels:
+      environment: {{ app_environment | default(environment) }}
+      instance: {{ inventory_hostname }}
+      project: zentravision
+      
+  configs:
+  - name: zentravision-metrics
+    
+    remote_write:
+    - url: {{ grafana_cloud_prometheus_url }}
+      basic_auth:
+        username: {{ grafana_cloud_username }}
+        password: {{ grafana_cloud_password }}
+      queue_config:
+        max_samples_per_send: 1000
+        max_shards: 10
+        capacity: 10000
+      
+    scrape_configs:
+    # Node metrics (sistema)
+    - job_name: 'node'
+      static_configs:
+      - targets: ['localhost:{{ node_exporter_port }}']
+        labels:
+          service: 'system'
+          app: 'zentravision'
+          
+    # PostgreSQL metrics
+    - job_name: 'postgresql'
+      static_configs:
+      - targets: ['localhost:{{ postgres_exporter_port }}']
+        labels:
+          service: 'postgresql'
+          app: 'zentravision'
+          
+    # Redis metrics
+    - job_name: 'redis'
+      static_configs:
+      - targets: ['localhost:{{ redis_exporter_port }}']
+        labels:
+          service: 'redis'
+          app: 'zentravision'
+          
+    # Django metrics
+    - job_name: 'django'
+      static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          service: 'django'
+          app: 'zentravision'
+      metrics_path: '/metrics/'
+      scrape_interval: 30s
+
+    # Self monitoring
+    - job_name: 'grafana-agent'
+      static_configs:
+      - targets: ['localhost:12345']
+        labels:
+          service: 'grafana-agent'
+          app: 'zentravision'

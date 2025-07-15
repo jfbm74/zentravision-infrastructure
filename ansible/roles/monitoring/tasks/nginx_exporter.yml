@@ -1,0 +1,4 @@
+---
+- name: Debug nginx_exporter placeholder
+  debug:
+    msg: "nginx_exporter configurado como placeholder (TODO: implementar)"

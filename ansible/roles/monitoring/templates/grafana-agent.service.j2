@@ -1,0 +1,19 @@
+[Unit]
+Description=Grafana Agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=monitoring
+Group=monitoring
+Type=simple
+ExecStart=/usr/local/bin/grafana-agent \
+    --config.file=/etc/grafana-agent/grafana-agent.yml \
+    --metrics.wal-directory=/var/lib/monitoring/wal \
+    --server.log.level=info
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

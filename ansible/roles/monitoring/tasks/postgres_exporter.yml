@@ -1,0 +1,22 @@
+---
+- name: Create PostgreSQL monitoring user
+  postgresql_user:
+    name: monitoring
+    password: "{{ vault_monitoring_db_password | default('monitoring123') }}"
+    state: present
+    role_attr_flags: LOGIN
+  become_user: postgres
+  ignore_errors: yes
+
+- name: Grant monitoring permissions
+  postgresql_privs:
+    database: "{{ app_name }}"
+    roles: monitoring
+    privs: CONNECT
+    type: database
+  become_user: postgres
+  ignore_errors: yes
+
+- name: Debug postgres exporter placeholder
+  debug:
+    msg: "PostgreSQL Exporter configurado básicamente (TODO: instalar binario)"
