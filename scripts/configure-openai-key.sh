@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_ID=${1:-"zentraflow"}
+PROJECT_ID=${1:-"zentravision"}
 ENV=${2:-"uat"}
 
 if [ "$#" -lt 2 ]; then

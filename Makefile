@@ -291,38 +291,38 @@ logs-monitoring-uat: ## Ver logs de monitoreo en UAT
 
 # Configurar Grafana API Token
 configure-grafana-dev: ## Configurar Grafana API Token para DEV
-	./scripts/configure-grafana-token.sh zentraflow dev
+	./scripts/configure-grafana-token.sh zentravision dev
 
 configure-grafana-uat: ## Configurar Grafana API Token para UAT
-	./scripts/configure-grafana-token.sh zentraflow uat
+	./scripts/configure-grafana-token.sh zentravision uat
 
 configure-grafana-prod: ## Configurar Grafana API Token para PROD
-	./scripts/configure-grafana-token.sh zentraflow prod
+	./scripts/configure-grafana-token.sh zentravision prod
 
 # Verificar secrets existentes
 check-secrets-dev: ## Verificar secrets de DEV
 	@echo "🔍 Verificando secrets para DEV..."
 	@echo "=================================="
-	@gcloud secrets describe zentraflow-dev-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
-	@gcloud secrets describe zentraflow-dev-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
-	@gcloud secrets describe zentraflow-dev-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
-	@gcloud secrets describe zentraflow-dev-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
+	@gcloud secrets describe zentravision-dev-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
+	@gcloud secrets describe zentravision-dev-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
+	@gcloud secrets describe zentravision-dev-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
+	@gcloud secrets describe zentravision-dev-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
 
 check-secrets-uat: ## Verificar secrets de UAT
 	@echo "🔍 Verificando secrets para UAT..."
 	@echo "=================================="
-	@gcloud secrets describe zentraflow-uat-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
-	@gcloud secrets describe zentraflow-uat-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
-	@gcloud secrets describe zentraflow-uat-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
-	@gcloud secrets describe zentraflow-uat-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
+	@gcloud secrets describe zentravision-uat-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
+	@gcloud secrets describe zentravision-uat-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
+	@gcloud secrets describe zentravision-uat-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
+	@gcloud secrets describe zentravision-uat-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
 
 check-secrets-prod: ## Verificar secrets de PROD
 	@echo "🔍 Verificando secrets para PROD..."
 	@echo "==================================="
-	@gcloud secrets describe zentraflow-prod-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
-	@gcloud secrets describe zentraflow-prod-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
-	@gcloud secrets describe zentraflow-prod-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
-	@gcloud secrets describe zentraflow-prod-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
+	@gcloud secrets describe zentravision-prod-django-secret >/dev/null 2>&1 && echo "✅ Django secret: OK" || echo "❌ Django secret: Missing"
+	@gcloud secrets describe zentravision-prod-db-password >/dev/null 2>&1 && echo "✅ DB password: OK" || echo "❌ DB password: Missing"
+	@gcloud secrets describe zentravision-prod-openai-key >/dev/null 2>&1 && echo "✅ OpenAI key: OK" || echo "❌ OpenAI key: Missing"
+	@gcloud secrets describe zentravision-prod-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
 
 # Comandos completos de despliegue con verificación de secrets
 deploy-monitoring-dev-complete: ## Desplegar monitoreo DEV (con verificación de secrets)
@@ -352,7 +352,7 @@ deploy-monitoring-uat-complete: ## Desplegar monitoreo UAT (con verificación de
 # Test de conectividad con Grafana Cloud
 test-grafana-connectivity-dev: ## Test conectividad Grafana Cloud DEV
 	@echo "🧪 Probando conectividad con Grafana Cloud (DEV)..."
-	@TOKEN=$$(gcloud secrets versions access latest --secret="zentraflow-dev-grafana-token" 2>/dev/null || echo "ERROR"); \
+	@TOKEN=$$(gcloud secrets versions access latest --secret="zentravision-dev-grafana-token" 2>/dev/null || echo "ERROR"); \
 	if [ "$$TOKEN" = "ERROR" ]; then \
 		echo "❌ No se pudo obtener token de Grafana. Ejecuta: make configure-grafana-dev"; \
 		exit 1; \

@@ -114,7 +114,7 @@ curl http://localhost:8000/health/
 
 ```bash
 # Método 1: Via Google Secret Manager (recomendado)
-echo "tu-openai-api-key" | gcloud secrets create zentraflow-dev-openai-key --data-file=-
+echo "tu-openai-api-key" | gcloud secrets create zentravision-dev-openai-key --data-file=-
 
 # Método 2: Editar settings.py directamente (temporal)
 cd /opt/zentravision/app
@@ -209,7 +209,7 @@ zentravision-infrastructure/
    exec -l $SHELL
    gcloud auth login
    gcloud auth application-default login
-   gcloud config set project zentraflow
+   gcloud config set project zentravision
    ```
 
 2. **Terraform**
@@ -402,13 +402,13 @@ Los secretos se almacenan en Google Secret Manager:
 ./scripts/setup-secrets.sh zentraflow prod
 
 # O manualmente
-echo -n "tu-api-key-openai" | gcloud secrets create zentraflow-prod-openai-key --data-file=-
+echo -n "tu-api-key-openai" | gcloud secrets create zentravision-prod-openai-key --data-file=-
 ```
 
 Secretos requeridos:
-- `zentraflow-{env}-django-secret`: Clave secreta de Django
-- `zentraflow-{env}-db-password`: Contraseña de la base de datos
-- `zentraflow-{env}-openai-key`: API Key de OpenAI
+- `zentravision-{env}-django-secret`: Clave secreta de Django
+- `zentravision-{env}-db-password`: Contraseña de la base de datos
+- `zentravision-{env}-openai-key`: API Key de OpenAI
 
 ## 📊 Monitoreo y Logs
 

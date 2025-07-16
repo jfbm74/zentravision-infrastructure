@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_ID=${1:-"zentraflow"}
+PROJECT_ID=${1:-"zentravision"}
 ENV=${2:-"prod"}
 
 echo "🔐 Configurando secretos para $PROJECT_ID-$ENV"

@@ -6,7 +6,7 @@
 
 set -e
 
-PROJECT_ID=${1:-"zentraflow"}
+PROJECT_ID=${1:-"zentravision"}
 ENV=${2:-"dev"}
 
 if [ "$#" -lt 2 ]; then
