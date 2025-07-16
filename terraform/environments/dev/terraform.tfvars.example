@@ -1,5 +1,5 @@
 # GCP Configuration
-project_id = "zentraflow"
+project_id = "zentravision"
 region     = "us-central1"
 zone       = "us-central1-a"
 environment = "prod"

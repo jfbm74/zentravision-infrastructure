@@ -1,28 +1,22 @@
 ---
-# ============================================================================
-# ARCHIVO: ansible/roles/monitoring/templates/grafana-agent.yml.j2
-# Configuración de Grafana Agent con Google Secret Manager integration
-# ============================================================================
-
 server:
   log_level: info
 
 metrics:
   global:
-    scrape_interval: {{ scrape_interval | default('15s') }}
+    scrape_interval: 15s
     external_labels:
-      environment: {{ app_environment | default(environment) }}
-      instance: {{ inventory_hostname }}
-      project: zentravision
+      environment: {{ app_environment }}
+      instance: {{ gcp_project_id }}-{{ app_environment }}
+      project: {{ gcp_project_id }}
       
   configs:
-  - name: zentravision-metrics
+  - name: {{ gcp_project_id }}-metrics
     
     remote_write:
     - url: {{ vault_grafana_prometheus_url }}
       basic_auth:
         username: {{ vault_grafana_username }}
-        # Password será obtenido dinámicamente del secret
         password: "{{ grafana_api_token_value }}"
       queue_config:
         max_samples_per_send: 1000
@@ -30,35 +24,27 @@ metrics:
         capacity: 10000
       
     scrape_configs:
-    # Node metrics (sistema)
     - job_name: 'node'
       static_configs:
-      - targets: ['localhost:{{ node_exporter_port | default(9100) }}']
+      - targets: ['localhost:9100']
         labels:
           service: 'system'
           app: 'zentravision'
           
-    # PostgreSQL metrics (si está configurado)
-    {% if postgres_exporter_port is defined %}
     - job_name: 'postgresql'
       static_configs:
-      - targets: ['localhost:{{ postgres_exporter_port }}']
+      - targets: ['localhost:9187']
         labels:
           service: 'postgresql'
           app: 'zentravision'
-    {% endif %}
-          
-    # Redis metrics (si está configurado)
-    {% if redis_exporter_port is defined %}
+              
     - job_name: 'redis'
       static_configs:
-      - targets: ['localhost:{{ redis_exporter_port }}']
+      - targets: ['localhost:9121']
         labels:
           service: 'redis'
           app: 'zentravision'
-    {% endif %}
-          
-    # Django metrics
+              
     - job_name: 'django'
       static_configs:
       - targets: ['localhost:8000']
@@ -67,8 +53,7 @@ metrics:
           app: 'zentravision'
       metrics_path: '/metrics/'
       scrape_interval: 30s
-
-    # Self monitoring
+      
     - job_name: 'grafana-agent'
       static_configs:
       - targets: ['localhost:12345']

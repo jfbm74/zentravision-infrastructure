@@ -30,7 +30,7 @@ zentravision:
       ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 
   vars:
-    gcp_project_id: zentraflow
+    gcp_project_id: zentravision
     app_environment: dev
     domain_name: "dev-zentravision.zentratek.com"
     admin_email: "consultoria@zentratek.com"
