@@ -1,0 +1,130 @@
+# ============================================================================
+# PLAYBOOK: deploy-django-metrics.yml
+# Deployment específico para Django metrics
+# ============================================================================
+---
+- name: Deploy Django Metrics to ZentraVision Infrastructure
+  hosts: zentravision
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    deployment_timestamp: "{{ ansible_date_time.epoch }}"
+    backup_enabled: true
+    
+  tasks:
+    - name: Display deployment information
+      debug:
+        msg: |
+          🚀 Deploying Django Metrics to ZentraVision
+          ==========================================
+          Target: {{ inventory_hostname }}
+          Environment: {{ app_environment }}
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          
+          📊 Metrics Configuration:
+          - Django Port: {{ django_metrics_port }}
+          - Django Path: {{ django_metrics_path }}
+          - App Path: {{ django_app_path }}
+          - Grafana Cloud: {{ vault_grafana_prometheus_url }}
+    
+    - name: Create backup directory
+      file:
+        path: "/tmp/deployment-backup-{{ deployment_timestamp }}"
+        state: directory
+        mode: '0755'
+      when: backup_enabled
+    
+    - name: Backup current Grafana Agent configuration
+      copy:
+        src: /etc/grafana-agent/grafana-agent.yml
+        dest: "/tmp/deployment-backup-{{ deployment_timestamp }}/grafana-agent.yml.backup"
+        remote_src: yes
+      ignore_errors: yes
+      when: backup_enabled
+    
+    - name: Backup current Django URLs configuration
+      copy:
+        src: "{{ django_app_path }}/app/zentravision/urls.py"
+        dest: "/tmp/deployment-backup-{{ deployment_timestamp }}/django-urls.py.backup"
+        remote_src: yes
+      ignore_errors: yes
+      when: backup_enabled
+    
+    - name: Configure Django metrics
+      include_role:
+        name: monitoring
+        tasks_from: django_metrics
+      tags: ['django_metrics']
+    
+    - name: Update Grafana Agent configuration
+      include_role:
+        name: monitoring
+        tasks_from: grafana_agent
+      tags: ['grafana_agent']
+    
+    - name: Verify all services are running
+      systemd:
+        name: "{{ item }}"
+        state: started
+      loop:
+        - grafana-agent
+        - node_exporter
+      register: service_status
+      ignore_errors: yes
+    
+    - name: Test all metrics endpoints
+      uri:
+        url: "{{ item.url }}"
+        method: GET
+        status_code: 200
+        timeout: 10
+      loop:
+        - { name: "Django", url: "http://localhost:{{ django_metrics_port }}{{ django_metrics_path }}" }
+        - { name: "Grafana Agent", url: "http://localhost:12345/metrics" }
+        - { name: "Node Exporter", url: "http://localhost:9100/metrics" }
+      register: endpoint_tests
+      ignore_errors: yes
+    
+    - name: Display deployment results
+      debug:
+        msg: |
+          🎯 Django Metrics Deployment Results
+          ===================================
+          
+          📊 Endpoints Status:
+          {% for test in endpoint_tests.results %}
+          - {{ test.item.name }}: {{ 'OK' if test.status == 200 else 'FAILED' }} ({{ test.status | default('No response') }})
+          {% endfor %}
+          
+          🔧 Services Status:
+          {% for service in service_status.results %}
+          - {{ service.item }}: {{ service.state | default('Unknown') }}
+          {% endfor %}
+          
+          {% if backup_enabled %}
+          💾 Backups created in: /tmp/deployment-backup-{{ deployment_timestamp }}/
+          {% endif %}
+          
+          🌐 Next Steps:
+          1. Wait 2-3 minutes for metrics to appear in Grafana Cloud
+          2. Go to https://zentratek.grafana.net/
+          3. Search for metrics starting with 'zentravision_'
+          
+          🔍 Troubleshooting Commands:
+          - sudo journalctl -u grafana-agent -f
+          - curl http://localhost:{{ django_metrics_port }}{{ django_metrics_path }}
+          - sudo systemctl status grafana-agent
+
+# ============================================================================
+# COMANDOS DE DEPLOYMENT
+# ============================================================================
+
+# Para deployar solo Django metrics:
+# ansible-playbook -i ansible/inventories/dev/hosts.yml deploy-django-metrics.yml --tags django_metrics
+
+# Para deployar configuración completa:
+# ansible-playbook -i ansible/inventories/dev/hosts.yml deploy-django-metrics.yml
+
+# Para verificar configuración sin cambios:
+# ansible-playbook -i ansible/inventories/dev/hosts.yml deploy-django-metrics.yml --check --diff

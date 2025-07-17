@@ -1,4 +1,9 @@
 ---
+# ============================================================================
+# DEFAULTS ACTUALIZADOS: ansible/roles/monitoring/defaults/main.yml
+# Con configuración de Django metrics agregada
+# ============================================================================
+
 # Grafana Cloud Configuration
 grafana_cloud_prometheus_url: "{{ vault_grafana_prometheus_url }}"
 grafana_cloud_username: "{{ vault_grafana_username }}"
@@ -28,6 +33,23 @@ grafana_agent_port: 12345
 grafana_agent_config_dir: "/etc/grafana-agent"
 grafana_agent_data_dir: "/var/lib/grafana-agent"
 grafana_agent_log_level: "info"
+
+# ============================================================================
+# DJANGO METRICS CONFIGURATION (NUEVO)
+# ============================================================================
+
+# Django application metrics
+enable_django_metrics: true
+django_metrics_port: 8000
+django_metrics_path: "/metrics/"
+django_scrape_interval: "15s"
+django_scrape_timeout: "10s"
+
+# Django application paths
+django_app_path: "/opt/zentravision"
+django_user: "zentravision"
+django_venv_path: "/opt/zentravision/venv"
+django_project_path: "/opt/zentravision/app"
 
 # PostgreSQL Exporter configuration
 postgres_exporter_user: "postgres_exporter"
@@ -87,11 +109,6 @@ create_monitoring_users: true
 
 # Security settings
 monitoring_allowed_ips: []
-# Example:
-# monitoring_allowed_ips:
-#   - "10.0.0.0/8"
-#   - "172.16.0.0/12"
-#   - "192.168.0.0/16"
 
 # Firewall settings
 configure_firewall: false
@@ -125,24 +142,12 @@ alertmanager_url: ""
 
 # Custom metrics and labels
 custom_labels:
-  environment: "{{ ansible_environment | default('production') }}"
+  environment: "{{ app_environment | default('dev') }}"
   project: "zentravision"
   region: "{{ ansible_region | default('us-central1') }}"
 
-# Django application metrics (if django-prometheus is configured)
-django_metrics_enabled: false
-django_metrics_port: 8001
-django_metrics_path: "/metrics"
-
 # Additional scrape configs for application-specific metrics
 additional_scrape_configs: []
-# Example:
-# additional_scrape_configs:
-#   - job_name: 'django-app'
-#     static_configs:
-#       - targets: ['localhost:8000']
-#     metrics_path: '/metrics'
-#     scrape_interval: 30s
 
 # Retention and storage
 metrics_retention: "15d"

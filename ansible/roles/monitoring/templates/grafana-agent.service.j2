@@ -13,7 +13,10 @@ Type=simple
 Restart=on-failure
 RestartSec=5s
 
-ExecStart=/usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --metrics.wal-directory=/var/lib/monitoring/wal
+ExecStart=/usr/local/bin/grafana-agent \
+  --config.file=/etc/grafana-agent/grafana-agent.yml \
+  --metrics.wal-directory=/var/lib/monitoring/wal \
+  --server.http.address=0.0.0.0:{{ grafana_agent_port | default(12345) }}
 
 LimitNOFILE=1000000
 LimitNPROC=1000000

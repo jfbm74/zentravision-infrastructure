@@ -1,13 +1,28 @@
 ---
 # ============================================================================
-# ARCHIVO: ansible/roles/monitoring/tasks/grafana_agent.yml
-# Tasks para Grafana Agent con integración de Google Secret Manager
+# ARCHIVO CORREGIDO: ansible/roles/monitoring/tasks/grafana_agent.yml
+# Versión que evita campos duplicados en la configuración YAML
+# ============================================================================
+
+- name: Display Grafana Agent setup information
+  debug:
+    msg: |
+      🚀 Configurando Grafana Agent para {{ app_environment | default(environment) }}
+      ================================================================
+      
+      📊 Configuración:
+      - Proyecto: {{ gcp_project_id }}
+      - Ambiente: {{ app_environment | default(environment) }}
+      - Secret esperado: {{ gcp_project_id }}-{{ app_environment | default(environment) }}-grafana-token
+
+# ============================================================================
+# VALIDACIONES PREVIAS
 # ============================================================================
 
 - name: Check if Grafana API Token secret exists and is accessible
   command: >
     gcloud secrets versions access latest 
-    --secret="{{ gcp_project_id }}-{{ app_environment }}-grafana-token"
+    --secret="{{ gcp_project_id }}-{{ app_environment | default(environment) }}-grafana-token"
   register: grafana_secret_check
   failed_when: false
   changed_when: false
@@ -16,17 +31,17 @@
 - name: Fail if Grafana API Token secret doesn't exist or is not accessible
   fail:
     msg: |
-      ❌ Grafana API Token secret no encontrado o no accesible: {{ gcp_project_id }}-{{ app_environment }}-grafana-token
+      ❌ Grafana API Token secret no encontrado o no accesible: {{ gcp_project_id }}-{{ app_environment | default(environment) }}-grafana-token
       
       📝 Para crear el secret, ejecuta:
-      ./scripts/configure-grafana-token.sh {{ gcp_project_id }} {{ app_environment }}
+      ./scripts/configure-grafana-token.sh {{ gcp_project_id }} {{ app_environment | default(environment) }}
       
       O manualmente:
-      echo -n "tu-grafana-token" | gcloud secrets create {{ gcp_project_id }}-{{ app_environment }}-grafana-token --data-file=-
+      echo -n "tu-grafana-token" | gcloud secrets create {{ gcp_project_id }}-{{ app_environment | default(environment) }}-grafana-token --data-file=-
       
       🔐 Verifica que el Service Account tenga permisos:
-      gcloud projects add-iam-policy-binding zentraflow \
-        --member="serviceAccount:{{ gcp_project_id }}-{{ app_environment }}@zentraflow.iam.gserviceaccount.com" \
+      gcloud projects add-iam-policy-binding {{ gcp_project_id }} \
+        --member="serviceAccount:{{ gcp_project_id }}-{{ app_environment | default(environment) }}@{{ gcp_project_id }}.iam.gserviceaccount.com" \
         --role="roles/secretmanager.secretAccessor"
   when: grafana_secret_check.rc != 0
 
@@ -48,7 +63,11 @@
       URL: {{ vault_grafana_prometheus_url }}
       Usuario: {{ vault_grafana_username }}
       Token: {{ grafana_api_token_value[:10] }}*** (obtenido de Secret Manager)
-      Secret: {{ gcp_project_id }}-{{ app_environment }}-grafana-token
+      Secret: {{ gcp_project_id }}-{{ app_environment | default(environment) }}-grafana-token
+
+# ============================================================================
+# INSTALACIÓN DE GRAFANA AGENT
+# ============================================================================
 
 - name: Stop existing Grafana Agent service if exists
   systemd:
@@ -61,14 +80,13 @@
     path: "{{ item }}"
     state: absent
   loop:
-    - /etc/grafana-agent/grafana-agent.yml
     - /tmp/grafana-agent.zip
     - /tmp/grafana-agent-linux-amd64
   ignore_errors: yes
 
 - name: Download Grafana Agent v0.38.1
   get_url:
-    url: "https://github.com/grafana/agent/releases/download/{{ grafana_agent_version }}/grafana-agent-linux-amd64.zip"
+    url: "https://github.com/grafana/agent/releases/download/{{ grafana_agent_version | default('v0.38.1') }}/grafana-agent-linux-amd64.zip"
     dest: "/tmp/grafana-agent.zip"
     timeout: 60
     mode: '0644'
@@ -100,9 +118,81 @@
 
 - name: Display Grafana Agent version
   debug:
-    msg: "Grafana Agent installed: {{ grafana_agent_version_check.stdout_lines[0] }}"
+    msg: "✅ Grafana Agent installed: {{ grafana_agent_version_check.stdout_lines[0] }}"
 
-- name: Create Grafana Agent configuration with Secret Manager token
+# ============================================================================
+# VARIABLES CONSOLIDADAS PARA EVITAR DUPLICADOS
+# ============================================================================
+
+- name: Consolidate all variables for template generation (ANTI-DUPLICADO)
+  set_fact:
+    # Variables principales verificadas
+    consolidated_vars:
+      # Autenticación Grafana Cloud
+      vault_grafana_prometheus_url: "{{ vault_grafana_prometheus_url }}"
+      vault_grafana_username: "{{ vault_grafana_username }}"
+      vault_grafana_password: "{{ grafana_api_token_value }}"
+      
+      # Configuración de ambiente
+      app_environment: "{{ app_environment | default(environment) }}"
+      gcp_project_id: "{{ gcp_project_id }}"
+      inventory_hostname: "{{ inventory_hostname }}"
+      
+      # Puertos de exporters (con defaults seguros)
+      grafana_agent_port: "{{ grafana_agent_port | default(12345) }}"
+      node_exporter_port: "{{ node_exporter_port | default(9100) }}"
+      redis_exporter_port: "{{ redis_exporter_port | default(9121) }}"
+      nginx_exporter_port: "{{ nginx_exporter_port | default(9113) }}"
+      postgres_exporter_port: "{{ postgres_exporter_port | default(9187) }}"
+      
+      # Configuración de scraping
+      scrape_interval: "{{ scrape_interval | default('15s') }}"
+      evaluation_interval: "{{ evaluation_interval | default('15s') }}"
+      
+      # Performance tuning
+      max_samples_per_send: "{{ max_samples_per_send | default(1000) }}"
+      batch_send_deadline: "{{ batch_send_deadline | default('5s') }}"
+      max_shards: "{{ max_shards | default(10) }}"
+      min_shards: "{{ min_shards | default(1) }}"
+      capacity: "{{ capacity | default(10000) }}"
+      
+      # Flags de habilitación
+      enable_node_exporter: "{{ enable_node_exporter | default(true) }}"
+      enable_postgres_exporter: "{{ enable_postgres_exporter | default(true) }}"
+      enable_redis_exporter: "{{ enable_redis_exporter | default(true) }}"
+      enable_nginx_exporter: "{{ enable_nginx_exporter | default(true) }}"
+      django_metrics_enabled: "{{ django_metrics_enabled | default(false) }}"
+
+- name: Display consolidated variables for debugging
+  debug:
+    msg: |
+      🔧 Variables Consolidadas para Template
+      =====================================
+      Grafana URL: {{ consolidated_vars.vault_grafana_prometheus_url }}
+      Usuario: {{ consolidated_vars.vault_grafana_username }}
+      Token: {{ consolidated_vars.vault_grafana_password[:10] }}***
+      Ambiente: {{ consolidated_vars.app_environment }}
+      Proyecto: {{ consolidated_vars.gcp_project_id }}
+      
+      🎯 Puertos de Exporters:
+      - Grafana Agent: {{ consolidated_vars.grafana_agent_port }}
+      - Node Exporter: {{ consolidated_vars.node_exporter_port }}
+      - Redis Exporter: {{ consolidated_vars.redis_exporter_port }}
+      - Nginx Exporter: {{ consolidated_vars.nginx_exporter_port }}
+      - Postgres Exporter: {{ consolidated_vars.postgres_exporter_port }}
+
+# ============================================================================
+# GENERACIÓN DE CONFIGURACIÓN (USANDO VARIABLES CONSOLIDADAS)
+# ============================================================================
+
+- name: Backup existing configuration if it exists
+  copy:
+    src: /etc/grafana-agent/grafana-agent.yml
+    dest: "/etc/grafana-agent/grafana-agent.yml.backup-{{ ansible_date_time.epoch }}"
+    remote_src: yes
+  ignore_errors: yes
+
+- name: Generate Grafana Agent configuration with consolidated variables
   template:
     src: grafana-agent.yml.j2
     dest: /etc/grafana-agent/grafana-agent.yml
@@ -110,22 +200,85 @@
     group: monitoring
     mode: '0600'
     backup: yes
+  vars:
+    # Pasar variables consolidadas al template
+    vault_grafana_prometheus_url: "{{ consolidated_vars.vault_grafana_prometheus_url }}"
+    vault_grafana_username: "{{ consolidated_vars.vault_grafana_username }}"
+    vault_grafana_password: "{{ consolidated_vars.vault_grafana_password }}"
+    
+    app_environment: "{{ consolidated_vars.app_environment }}"
+    gcp_project_id: "{{ consolidated_vars.gcp_project_id }}"
+    inventory_hostname: "{{ consolidated_vars.inventory_hostname }}"
+    
+    grafana_agent_port: "{{ consolidated_vars.grafana_agent_port }}"
+    node_exporter_port: "{{ consolidated_vars.node_exporter_port }}"
+    redis_exporter_port: "{{ consolidated_vars.redis_exporter_port }}"
+    nginx_exporter_port: "{{ consolidated_vars.nginx_exporter_port }}"
+    postgres_exporter_port: "{{ consolidated_vars.postgres_exporter_port }}"
+    
+    scrape_interval: "{{ consolidated_vars.scrape_interval }}"
+    evaluation_interval: "{{ consolidated_vars.evaluation_interval }}"
+    
+    max_samples_per_send: "{{ consolidated_vars.max_samples_per_send }}"
+    batch_send_deadline: "{{ consolidated_vars.batch_send_deadline }}"
+    max_shards: "{{ consolidated_vars.max_shards }}"
+    min_shards: "{{ consolidated_vars.min_shards }}"
+    capacity: "{{ consolidated_vars.capacity }}"
+    
+    enable_node_exporter: "{{ consolidated_vars.enable_node_exporter }}"
+    enable_postgres_exporter: "{{ consolidated_vars.enable_postgres_exporter }}"
+    enable_redis_exporter: "{{ consolidated_vars.enable_redis_exporter }}"
+    enable_nginx_exporter: "{{ consolidated_vars.enable_nginx_exporter }}"
+    django_metrics_enabled: "{{ consolidated_vars.django_metrics_enabled }}"
   notify: restart grafana-agent
 
-- name: Validate Grafana Agent configuration syntax
+- name: Validate generated YAML configuration syntax
   shell: |
-    if /usr/local/bin/grafana-agent --help | grep -q "dry-run"; then
-      /usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --dry-run
-    else
-      echo "Validation skipped: dry-run flag not available in this version"
-    fi
-  register: config_validation
+    # Verificar sintaxis YAML básica
+    python3 -c "
+    import yaml
+    try:
+        with open('/etc/grafana-agent/grafana-agent.yml', 'r') as f:
+            yaml.safe_load(f)
+        print('✅ YAML syntax is valid')
+    except yaml.YAMLError as e:
+        print(f'❌ YAML syntax error: {e}')
+        exit(1)
+    except Exception as e:
+        print(f'❌ Error reading file: {e}')
+        exit(1)
+    "
+  register: yaml_validation
   changed_when: false
-  failed_when: false
 
-- name: Display configuration validation result
+- name: Display YAML validation result
   debug:
-    msg: "✅ Grafana Agent configuration validation completed"
+    msg: "{{ yaml_validation.stdout }}"
+
+- name: Check for duplicate keys in generated configuration
+  shell: |
+    # Buscar posibles duplicados en la configuración generada
+    awk '/^[[:space:]]*[a-zA-Z_]+:/ {
+        key = $1; gsub(/:/, "", key)
+        if (seen[key]++) {
+            print "DUPLICATE KEY FOUND: " key " (line " NR ")"
+            exit 1
+        }
+    }' /etc/grafana-agent/grafana-agent.yml
+    echo "✅ No duplicate keys found"
+  register: duplicate_check
+  changed_when: false
+  failed_when: 
+    - duplicate_check.rc != 0
+    - "'DUPLICATE KEY FOUND' in duplicate_check.stdout"
+
+- name: Display duplicate check result
+  debug:
+    msg: "{{ duplicate_check.stdout }}"
+
+# ============================================================================
+# SERVICIO SYSTEMD
+# ============================================================================
 
 - name: Create Grafana Agent systemd service
   template:
@@ -138,9 +291,12 @@
     - reload systemd
     - restart grafana-agent
 
-- name: Reload systemd daemon
-  systemd:
-    daemon_reload: yes
+- name: Add missing handler for systemd reload
+  meta: flush_handlers
+
+# ============================================================================
+# INICIO Y VERIFICACIÓN DEL SERVICIO
+# ============================================================================
 
 - name: Start and enable Grafana Agent
   systemd:
@@ -151,7 +307,7 @@
 
 - name: Wait for Grafana Agent to start
   wait_for:
-    port: 12345
+    port: "{{ consolidated_vars.grafana_agent_port }}"
     host: localhost
     delay: 5
     timeout: 30
@@ -167,7 +323,7 @@
 
 - name: Test Grafana Agent metrics endpoint
   uri:
-    url: "http://localhost:12345/metrics"
+    url: "http://localhost:{{ consolidated_vars.grafana_agent_port }}/metrics"
     method: GET
     status_code: 200
   register: metrics_test
@@ -177,10 +333,10 @@
 
 - name: Test connectivity to Grafana Cloud
   uri:
-    url: "{{ vault_grafana_prometheus_url }}"
+    url: "{{ consolidated_vars.vault_grafana_prometheus_url }}"
     method: POST
     headers:
-      Authorization: "Basic {{ (vault_grafana_username + ':' + grafana_api_token_value) | b64encode }}"
+      Authorization: "Basic {{ (consolidated_vars.vault_grafana_username + ':' + consolidated_vars.vault_grafana_password) | b64encode }}"
       Content-Type: "application/x-protobuf"
     body: ""
     status_code: [200, 400, 405]
@@ -188,28 +344,31 @@
   ignore_errors: yes
   no_log: true
 
-- name: Display Grafana Agent deployment status
+- name: Display final Grafana Agent deployment status
   debug:
     msg: |
-      🎉 Grafana Agent con Secret Manager
-      =================================
+      🎉 Grafana Agent Desplegado Exitosamente
+      ======================================
       Service Status: {{ grafana_agent_status.stdout }}
       Metrics Endpoint: {{ 'OK' if metrics_test.status == 200 else 'Failed' }}
       Grafana Cloud: {{ 'OK' if grafana_cloud_test.status in [200, 400, 405] else 'Failed' }}
       
       🔐 Secret Manager Integration:
-      - Secret: {{ gcp_project_id }}-{{ app_environment }}-grafana-token
-      - Token: {{ grafana_api_token_value[:10] }}*** (últimos caracteres ocultos)
+      - Secret: {{ gcp_project_id }}-{{ app_environment | default(environment) }}-grafana-token
+      - Token: {{ consolidated_vars.vault_grafana_password[:10] }}*** (últimos caracteres ocultos)
       
       📊 Monitoring Endpoints:
-      - Grafana Agent: http://localhost:12345/metrics
-      - Node Exporter: http://localhost:{{ node_exporter_port | default(9100) }}/metrics
+      - Grafana Agent: http://localhost:{{ consolidated_vars.grafana_agent_port }}/metrics
+      - Node Exporter: http://localhost:{{ consolidated_vars.node_exporter_port }}/metrics
+      - Redis Exporter: http://localhost:{{ consolidated_vars.redis_exporter_port }}/metrics
+      - Nginx Exporter: http://localhost:{{ consolidated_vars.nginx_exporter_port }}/metrics
       - Django App: http://localhost:8000/metrics/
       
       🔧 Management Commands:
       - Status: sudo systemctl status grafana-agent
       - Logs: sudo journalctl -u grafana-agent -f
       - Restart: sudo systemctl restart grafana-agent
+      - Test config: /usr/local/bin/grafana-agent --config.validate --config.file=/etc/grafana-agent/grafana-agent.yml
 
 - name: Clean up temporary files
   file:
@@ -220,7 +379,8 @@
     - /tmp/grafana-agent-linux-amd64
   ignore_errors: yes
 
-- name: Clear Grafana API Token from memory
+- name: Clear sensitive variables from memory
   set_fact:
     grafana_api_token_value: ""
+    consolidated_vars: {}
   no_log: true

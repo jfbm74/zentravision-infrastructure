@@ -1,41 +1,228 @@
 ---
+# ============================================================================
+# TASK ACTUALIZADA: ansible/roles/monitoring/tasks/django_metrics.yml
+# Configuración completa de Django metrics para ZentraVision
+# ============================================================================
+
+- name: Django Metrics Setup
+  debug:
+    msg: |
+      🔧 Configurando Django Metrics para ZentraVision
+      ================================================
+      App Path: {{ django_app_path }}
+      User: {{ django_user }}
+      Port: {{ django_metrics_port }}
+      Path: {{ django_metrics_path }}
+
+- name: Check if Django application exists
+  stat:
+    path: "{{ django_app_path }}/app"
+  register: django_app_dir
+
+- name: Fail if Django application not found
+  fail:
+    msg: |
+      ❌ Django application not found at {{ django_app_path }}/app
+      Please ensure the Django application is deployed first
+  when: not django_app_dir.stat.exists
+
+- name: Find Django project directory
+  find:
+    paths: "{{ django_app_path }}/app"
+    file_type: directory
+    contains: "settings.py"
+    recurse: yes
+  register: django_project_dirs
+
+- name: Set Django project path
+  set_fact:
+    django_settings_dir: "{{ django_project_dirs.files[0].path }}"
+  when: django_project_dirs.files | length > 0
+
+- name: Fail if Django settings not found
+  fail:
+    msg: |
+      ❌ Django settings.py not found in {{ django_app_path }}/app
+      Please check your Django project structure
+  when: django_project_dirs.files | length == 0
+
+- name: Check if metrics_views.py already exists
+  stat:
+    path: "{{ django_app_path }}/app/metrics_views.py"
+  register: metrics_views_file
+
 - name: Create Django metrics view file
   template:
     src: django_metrics.py.j2
-    dest: "{{ app_home }}/app/metrics_views.py"
-    owner: "{{ app_user }}"
-    group: "{{ app_user }}"
+    dest: "{{ django_app_path }}/app/metrics_views.py"
+    owner: "{{ django_user }}"
+    group: "{{ django_user }}"
     mode: '0644'
+  become: yes
+  become_user: "{{ django_user }}"
+  when: not metrics_views_file.stat.exists
+  notify: restart grafana-agent
 
 - name: Install psutil in Django virtual environment
   pip:
     name: psutil
-    virtualenv: "{{ app_home }}/venv"
-  become_user: "{{ app_user }}"
+    virtualenv: "{{ django_venv_path }}"
+    state: present
+  become: yes
+  become_user: "{{ django_user }}"
 
 - name: Check if Django URLs file exists
   stat:
-    path: "{{ app_home }}/app/{{ app_name }}/urls.py"
+    path: "{{ django_settings_dir }}/urls.py"
   register: urls_file
 
-- name: Add metrics URL to Django URLs
+- name: Backup original URLs file
+  copy:
+    src: "{{ django_settings_dir }}/urls.py"
+    dest: "{{ django_settings_dir }}/urls.py.backup-{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    owner: "{{ django_user }}"
+    group: "{{ django_user }}"
+  become: yes
+  become_user: "{{ django_user }}"
+  when: urls_file.stat.exists
+
+- name: Check if metrics URL already configured
   lineinfile:
-    path: "{{ app_home }}/app/{{ app_name }}/urls.py"
-    insertafter: "from django.urls import path"
+    path: "{{ django_settings_dir }}/urls.py"
+    line: "from metrics_views import metrics_view"
+    state: present
+    check_mode: yes
+  register: metrics_import_check
+  when: urls_file.stat.exists
+
+- name: Add metrics import to Django URLs
+  lineinfile:
+    path: "{{ django_settings_dir }}/urls.py"
+    insertafter: "from django.urls import"
     line: "from metrics_views import metrics_view"
     regexp: "^from metrics_views import"
+  become: yes
+  become_user: "{{ django_user }}"
+  when: 
+    - urls_file.stat.exists
+    - metrics_import_check is changed
+
+- name: Check if metrics path already configured
+  lineinfile:
+    path: "{{ django_settings_dir }}/urls.py"
+    line: "    path('metrics/', metrics_view, name='metrics'),"
+    state: present
+    check_mode: yes
+  register: metrics_path_check
   when: urls_file.stat.exists
 
 - name: Add metrics path to urlpatterns
   lineinfile:
-    path: "{{ app_home }}/app/{{ app_name }}/urls.py"
+    path: "{{ django_settings_dir }}/urls.py"
     insertafter: "urlpatterns = \\["
     line: "    path('metrics/', metrics_view, name='metrics'),"
     regexp: ".*path\\('metrics/'.*"
-  when: urls_file.stat.exists
+  become: yes
+  become_user: "{{ django_user }}"
+  when: 
+    - urls_file.stat.exists
+    - metrics_path_check is changed
 
-- name: Restart Django to load metrics endpoint
-  systemd:
-    name: "{{ app_name }}"
-    state: restarted
+- name: Test Django metrics endpoint
+  uri:
+    url: "http://localhost:{{ django_metrics_port }}{{ django_metrics_path }}"
+    method: GET
+    status_code: 200
+    timeout: 10
+  register: django_metrics_test
+  retries: 3
+  delay: 5
   ignore_errors: yes
+
+- name: Display Django metrics status
+  debug:
+    msg: |
+      📊 Django Metrics Configuration Status
+      ====================================
+      {% if django_metrics_test is succeeded %}
+      ✅ Django metrics endpoint responding
+      URL: http://localhost:{{ django_metrics_port }}{{ django_metrics_path }}
+      Status: {{ django_metrics_test.status }}
+      {% else %}
+      ⚠️  Django metrics endpoint not responding yet
+      URL: http://localhost:{{ django_metrics_port }}{{ django_metrics_path }}
+      This is normal if Django hasn't been restarted yet
+      {% endif %}
+      
+      📝 Files configured:
+      - Metrics view: {{ django_app_path }}/app/metrics_views.py
+      - URLs config: {{ django_settings_dir }}/urls.py
+      
+      🔄 Next steps:
+      - Django service will be restarted automatically
+      - Grafana Agent will be configured to scrape this endpoint
+      - Metrics will appear in Grafana Cloud as 'zentravision_*'
+
+- name: Create Django metrics systemd drop-in directory
+  file:
+    path: "/etc/systemd/system/{{ item }}.service.d"
+    state: directory
+    mode: '0755'
+  loop:
+    - gunicorn
+    - zentravision
+  ignore_errors: yes
+  become: yes
+
+- name: Restart Django application to load metrics endpoint
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+    daemon_reload: yes
+  loop:
+    - gunicorn
+    - zentravision
+  ignore_errors: yes
+  become: yes
+
+- name: Wait for Django to restart
+  wait_for:
+    port: "{{ django_metrics_port }}"
+    host: localhost
+    timeout: 60
+    delay: 10
+  ignore_errors: yes
+
+- name: Final test of Django metrics endpoint
+  uri:
+    url: "http://localhost:{{ django_metrics_port }}{{ django_metrics_path }}"
+    method: GET
+    status_code: 200
+    return_content: yes
+  register: final_metrics_test
+  retries: 5
+  delay: 10
+  ignore_errors: yes
+
+- name: Display final Django metrics test result
+  debug:
+    msg: |
+      🎯 Final Django Metrics Test
+      ===========================
+      {% if final_metrics_test is succeeded %}
+      ✅ SUCCESS: Django metrics endpoint is working
+      
+      Sample metrics found:
+      {{ final_metrics_test.content.split('\n')[:10] | join('\n') }}
+      
+      Total metrics: {{ final_metrics_test.content | regex_findall('zentravision_') | length }}
+      {% else %}
+      ❌ Django metrics endpoint still not responding
+      
+      Troubleshooting steps:
+      1. Check Django service: sudo systemctl status gunicorn
+      2. Check logs: sudo journalctl -u gunicorn -n 20
+      3. Test manually: curl http://localhost:{{ django_metrics_port }}{{ django_metrics_path }}
+      4. Verify URLs configuration in {{ django_settings_dir }}/urls.py
+      {% endif %}

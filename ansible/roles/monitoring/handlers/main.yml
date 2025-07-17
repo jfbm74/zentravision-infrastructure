@@ -1,5 +1,8 @@
 ---
-# Handlers for monitoring role
+# ============================================================================
+# HANDLERS CORREGIDOS: ansible/roles/monitoring/handlers/main.yml
+# Agregando handler faltante para systemd reload
+# ============================================================================
 
 - name: restart postgres_exporter
   systemd:
@@ -52,10 +55,15 @@
     state: reloaded
   listen: "reload nginx"
 
+# ============================================================================
+# HANDLERS DE GRAFANA AGENT (CORREGIDOS)
+# ============================================================================
+
 - name: restart grafana-agent
   systemd:
     name: grafana-agent
     state: restarted
+    daemon_reload: yes
   listen: "restart grafana-agent"
 
 - name: reload grafana-agent
@@ -63,3 +71,12 @@
     name: grafana-agent
     state: reloaded
   listen: "reload grafana-agent"
+
+# ============================================================================
+# HANDLER FALTANTE: SYSTEMD RELOAD
+# ============================================================================
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  listen: "reload systemd"
