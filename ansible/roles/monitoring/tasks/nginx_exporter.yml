@@ -1,4 +1,78 @@
 ---
-- name: Debug nginx_exporter placeholder
-  debug:
-    msg: "nginx_exporter configurado como placeholder (TODO: implementar)"
+- name: Enable nginx stub_status module
+  blockinfile:
+    path: "{{ nginx_config_path }}"
+    block: |
+      location /nginx_status {
+          stub_status on;
+          access_log off;
+          allow 127.0.0.1;
+          allow ::1;
+          deny all;
+      }
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - nginx_status"
+  notify: restart nginx
+
+- name: Test nginx configuration
+  command: nginx -t
+  register: nginx_test
+  changed_when: false
+
+- name: Reload nginx to apply stub_status
+  systemd:
+    name: nginx
+    state: reloaded
+  when: nginx_test.rc == 0
+
+- name: Create nginx_exporter user
+  user:
+    name: nginx_exporter
+    system: yes
+    shell: /bin/false
+    home: /var/lib/nginx_exporter
+    createhome: no
+
+- name: Create nginx_exporter directory
+  file:
+    path: /var/lib/nginx_exporter
+    state: directory
+    owner: nginx_exporter
+    group: nginx_exporter
+    mode: '0755'
+
+- name: Download nginx_exporter
+  get_url:
+    url: "{{ nginx_exporter_url }}"
+    dest: /tmp/nginx_exporter.tar.gz
+    mode: '0644'
+
+- name: Extract nginx_exporter
+  unarchive:
+    src: /tmp/nginx_exporter.tar.gz
+    dest: /tmp/
+    remote_src: yes
+
+- name: Install nginx_exporter binary
+  copy:
+    src: /tmp/nginx-prometheus-exporter
+    dest: /usr/local/bin/nginx_exporter
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: yes
+
+- name: Create nginx_exporter service file
+  template:
+    src: nginx_exporter.service.j2
+    dest: /etc/systemd/system/nginx_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart nginx_exporter
+
+- name: Enable and start nginx_exporter
+  systemd:
+    name: nginx_exporter
+    enabled: yes
+    state: started
+    daemon_reload: yes

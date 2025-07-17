@@ -199,45 +199,148 @@ configure-ssl: ## Configurar SSL para un ambiente específico
 	elif [ "$env" = "prod" ]; then ./scripts/deploy/prod/check-dns.sh; \
 	else echo "Ambiente no válido"; fi
 
-
 # ============================================================================
-# COMANDOS DE MONITOREO - Agregar al final del Makefile
+# COMANDOS DE MONITOREO Y DJANGO METRICS (ACTUALIZADOS)
 # ============================================================================
 
-# Comandos de monitoreo
-deploy-monitoring-dev: ## Desplegar solo monitoreo (DEV)
+# Comandos de monitoreo completo (incluyendo Django metrics)
+deploy-monitoring-dev: ## Desplegar monitoreo completo + Django metrics (DEV)
+	@echo "📊 Desplegando monitoreo completo en DEV (incluyendo Django metrics)..."
+	@echo "======================================================================"
 	@echo "🔄 Generando inventario dinámico para DEV..."
 	./scripts/deploy/dev/generate-inventory-dev.sh
-	@echo "📊 Desplegando monitoreo en DEV..."
-	cd ansible && ansible-playbook -i inventories/dev playbooks/site.yml --tags monitoring
+	@echo "📊 Desplegando monitoreo + Django metrics en DEV..."
+	cd ansible && ansible-playbook -i inventories/dev playbooks/site.yml --tags monitoring,django_metrics
+	@echo ""
+	@echo "✅ Despliegue completado. Verificando estado..."
+	@make test-django-metrics-dev
 
-deploy-monitoring-uat: ## Desplegar solo monitoreo (UAT)
+deploy-monitoring-uat: ## Desplegar monitoreo completo + Django metrics (UAT)
+	@echo "📊 Desplegando monitoreo completo en UAT (incluyendo Django metrics)..."
+	@echo "======================================================================"
 	@echo "🔄 Generando inventario dinámico para UAT..."
 	./scripts/deploy/uat/generate-inventory-uat.sh
-	@echo "📊 Desplegando monitoreo en UAT..."
-	cd ansible && ansible-playbook -i inventories/uat playbooks/site.yml --tags monitoring
+	@echo "📊 Desplegando monitoreo + Django metrics en UAT..."
+	cd ansible && ansible-playbook -i inventories/uat playbooks/site.yml --tags monitoring,django_metrics
+	@echo ""
+	@echo "✅ Despliegue completado. Verificando estado..."
+	@make test-django-metrics-uat
 
-deploy-monitoring-prod: ## Desplegar solo monitoreo (PROD)
-	@echo "⚠️  Desplegando monitoreo en PRODUCCIÓN"
+deploy-monitoring-prod: ## Desplegar monitoreo completo + Django metrics (PROD)
+	@echo "⚠️  Desplegando monitoreo completo en PRODUCCIÓN (incluyendo Django metrics)"
 	@echo "¿Continuar? (Ctrl+C para cancelar, Enter para continuar)"
 	@read dummy
 	@echo "🔄 Generando inventario dinámico para PROD..."
 	./scripts/deploy/prod/generate-inventory-prod.sh
-	@echo "📊 Desplegando monitoreo en PROD..."
-	cd ansible && ansible-playbook -i inventories/prod playbooks/site.yml --tags monitoring
+	@echo "📊 Desplegando monitoreo + Django metrics en PROD..."
+	cd ansible && ansible-playbook -i inventories/prod playbooks/site.yml --tags monitoring,django_metrics
+	@echo ""
+	@echo "✅ Despliegue completado. Verificando estado..."
+	@make test-django-metrics-prod
 
-check-monitoring: ## Verificar estado del monitoreo
-	@echo "🔍 Verificando servicios de monitoreo..."
+# Comandos específicos para Django metrics
+deploy-django-metrics-dev: ## Desplegar solo Django metrics (DEV)
+	@echo "🐍 Desplegando solo Django metrics en DEV..."
+	@echo "============================================"
+	./scripts/deploy/dev/generate-inventory-dev.sh
+	cd ansible && ansible-playbook -i inventories/dev playbooks/site.yml --tags django_metrics
+	@make test-django-metrics-dev
+
+deploy-django-metrics-uat: ## Desplegar solo Django metrics (UAT)
+	@echo "🐍 Desplegando solo Django metrics en UAT..."
+	@echo "============================================"
+	./scripts/deploy/uat/generate-inventory-uat.sh
+	cd ansible && ansible-playbook -i inventories/uat playbooks/site.yml --tags django_metrics
+	@make test-django-metrics-uat
+
+deploy-django-metrics-prod: ## Desplegar solo Django metrics (PROD)
+	@echo "⚠️  Desplegando Django metrics en PRODUCCIÓN"
+	@echo "¿Continuar? (Ctrl+C para cancelar, Enter para continuar)"
+	@read dummy
+	@echo "🐍 Desplegando solo Django metrics en PROD..."
+	./scripts/deploy/prod/generate-inventory-prod.sh
+	cd ansible && ansible-playbook -i inventories/prod playbooks/site.yml --tags django_metrics
+	@make test-django-metrics-prod
+
+# Tests específicos de Django metrics
+test-django-metrics-dev: ## Test Django metrics endpoint (DEV)
+	@echo "🧪 Probando Django metrics en DEV..."
+	@echo "===================================="
+	@INSTANCE_IP=$$(cat .last-dev-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener IP de DEV"; \
+		exit 1; \
+	fi; \
+	echo "📍 Testing en $$INSTANCE_IP"; \
+	echo "Django metrics endpoint:"; \
+	HTTP_CODE=$$(curl -s -o /dev/null -w '%{http_code}' http://dev-zentravision.zentratek.com/metrics/ 2>/dev/null || echo 'Error'); \
+	if [ "$$HTTP_CODE" = "200" ]; then \
+		echo "✅ Django metrics: HTTP $$HTTP_CODE"; \
+		METRICS_COUNT=$$(curl -s http://dev-zentravision.zentratek.com/metrics/ 2>/dev/null | grep -c 'zentravision_' || echo '0'); \
+		echo "📊 Métricas zentravision encontradas: $$METRICS_COUNT"; \
+		curl -s http://dev-zentravision.zentratek.com/metrics/ 2>/dev/null | grep 'zentravision_' | head -3; \
+	else \
+		echo "❌ Django metrics: HTTP $$HTTP_CODE"; \
+		echo "🔍 Testing endpoint interno..."; \
+		ssh zentravision@$$INSTANCE_IP 'curl -s -o /dev/null -w "Internal HTTP: %{http_code}\n" http://localhost:8000/metrics/' 2>/dev/null || echo "Error en test interno"; \
+	fi
+
+test-django-metrics-uat: ## Test Django metrics endpoint (UAT)
+	@echo "🧪 Probando Django metrics en UAT..."
+	@echo "===================================="
+	@INSTANCE_IP=$$(cat .last-uat-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener IP de UAT"; \
+		exit 1; \
+	fi; \
+	echo "📍 Testing en $$INSTANCE_IP"; \
+	ssh zentravision@$$INSTANCE_IP 'bash -s' << 'REMOTE_SCRIPT'
+		echo "Django metrics (local):"
+		HTTP_CODE=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/metrics/)
+		if [ "$$HTTP_CODE" = "200" ]; then
+			echo "✅ Django metrics: HTTP $$HTTP_CODE"
+			METRICS_COUNT=$$(curl -s http://localhost:8000/metrics/ | grep -c 'zentravision_')
+			echo "📊 Métricas zentravision: $$METRICS_COUNT"
+			curl -s http://localhost:8000/metrics/ | grep 'zentravision_' | head -3
+		else
+			echo "❌ Django metrics: HTTP $$HTTP_CODE"
+		fi
+	REMOTE_SCRIPT
+
+test-django-metrics-prod: ## Test Django metrics endpoint (PROD)
+	@echo "🧪 Probando Django metrics en PROD..."
+	@echo "====================================="
+	@INSTANCE_IP=$$(cd terraform/environments/prod && terraform output -raw instance_ip 2>/dev/null || echo "No encontrado"); \
+	if [ "$$INSTANCE_IP" = "No encontrado" ]; then \
+		echo "❌ No se pudo obtener IP de PROD"; \
+		exit 1; \
+	fi; \
+	echo "📍 Testing en $$INSTANCE_IP"; \
+	ssh admin@$$INSTANCE_IP 'bash -s' << 'REMOTE_SCRIPT'
+		echo "Django metrics (local):"
+		HTTP_CODE=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/metrics/)
+		if [ "$$HTTP_CODE" = "200" ]; then
+			echo "✅ Django metrics: HTTP $$HTTP_CODE"
+			METRICS_COUNT=$$(curl -s http://localhost:8000/metrics/ | grep -c 'zentravision_')
+			echo "📊 Métricas zentravision: $$METRICS_COUNT"
+			curl -s http://localhost:8000/metrics/ | grep 'zentravision_' | head -3
+		else
+			echo "❌ Django metrics: HTTP $$HTTP_CODE"
+		fi
+	REMOTE_SCRIPT
+
+check-monitoring: ## Verificar estado del monitoreo completo
+	@echo "🔍 Verificando servicios de monitoreo completo..."
 	@ENV=${1:-dev}; \
 	INSTANCE_IP=$$(cat .last-$$ENV-ip 2>/dev/null || echo ""); \
 	if [ -z "$$INSTANCE_IP" ]; then \
 		echo "❌ No se pudo obtener la IP de $$ENV"; \
 		exit 1; \
 	fi; \
-	echo "📍 Verificando monitoreo en $$ENV ($$INSTANCE_IP)"; \
+	echo "📍 Verificando monitoreo completo en $$ENV ($$INSTANCE_IP)"; \
 	ssh zentravision@$$INSTANCE_IP 'bash -s' << 'REMOTE_SCRIPT'
 		echo "=== Servicios de Monitoreo ==="
-		for service in grafana-agent node_exporter postgres_exporter redis_exporter; do
+		for service in grafana-agent node_exporter postgres_exporter redis_exporter nginx_exporter; do
 			if systemctl is-active --quiet $$service 2>/dev/null; then
 				echo "✅ $$service: Activo"
 			else
@@ -248,24 +351,18 @@ check-monitoring: ## Verificar estado del monitoreo
 		echo "=== Test de Métricas ==="
 		echo "Django Metrics:"
 		curl -s http://localhost:8000/metrics/ | head -3 || echo "❌ Error"
+		echo ""
 		echo "Node Exporter:"
 		curl -s http://localhost:9100/metrics | head -3 || echo "❌ Error"
+		echo ""
+		echo "Grafana Agent:"
+		curl -s http://localhost:12345/metrics | head -3 || echo "❌ Error"
 	REMOTE_SCRIPT
 
 setup-grafana: ## Configurar monitoreo de Grafana Cloud
 	@echo "Ambientes disponibles: dev, uat, prod"
 	@read -p "¿Para qué ambiente? " env; \
 	./scripts/monitoring/setup-grafana-monitoring.sh $$env
-
-test-metrics-dev: ## Probar métricas en DEV
-	@INSTANCE_IP=$$(cat .last-dev-ip 2>/dev/null || echo ""); \
-	if [ -z "$$INSTANCE_IP" ]; then \
-		echo "❌ No se pudo obtener IP de DEV"; \
-		exit 1; \
-	fi; \
-	echo "🧪 Probando métricas en DEV ($$INSTANCE_IP)"; \
-	echo "Django: $$(curl -s -o /dev/null -w '%{http_code}' http://dev-zentravision.zentratek.com/metrics/ || echo 'Error')"; \
-	ssh zentravision@$$INSTANCE_IP 'curl -s http://localhost:9100/metrics | grep -c node_' 2>/dev/null && echo "✅ Node Exporter OK" || echo "❌ Node Exporter FAIL"
 
 logs-monitoring-dev: ## Ver logs de monitoreo en DEV
 	@INSTANCE_IP=$$(cat .last-dev-ip 2>/dev/null || echo ""); \
@@ -283,10 +380,8 @@ logs-monitoring-uat: ## Ver logs de monitoreo en UAT
 	fi; \
 	ssh zentravision@$$INSTANCE_IP 'sudo journalctl -u grafana-agent -f'
 
-
 # ============================================================================
 # COMANDOS DE MONITOREO CON GOOGLE SECRET MANAGER
-# Agregar al final del Makefile existente
 # ============================================================================
 
 # Configurar Grafana API Token
@@ -325,29 +420,23 @@ check-secrets-prod: ## Verificar secrets de PROD
 	@gcloud secrets describe zentravision-prod-grafana-token >/dev/null 2>&1 && echo "✅ Grafana token: OK" || echo "❌ Grafana token: Missing"
 
 # Comandos completos de despliegue con verificación de secrets
-deploy-monitoring-dev-complete: ## Desplegar monitoreo DEV (con verificación de secrets)
+deploy-monitoring-dev-complete: ## Desplegar monitoreo completo DEV (con verificación de secrets)
 	@echo "🔍 Verificando secrets antes del despliegue..."
 	@make check-secrets-dev
 	@echo ""
 	@echo "¿Todos los secrets están OK? Si falta Grafana token, ejecuta 'make configure-grafana-dev' primero"
 	@echo "¿Continuar con el despliegue? (y/N)"
 	@read confirm && [ "$$confirm" = "y" ] || exit 1
-	@echo "🔄 Generando inventario dinámico para DEV..."
-	./scripts/deploy/dev/generate-inventory-dev.sh
-	@echo "📊 Desplegando monitoreo en DEV..."
-	cd ansible && ansible-playbook -i inventories/dev playbooks/site.yml --tags monitoring
+	@make deploy-monitoring-dev
 
-deploy-monitoring-uat-complete: ## Desplegar monitoreo UAT (con verificación de secrets)
+deploy-monitoring-uat-complete: ## Desplegar monitoreo completo UAT (con verificación de secrets)
 	@echo "🔍 Verificando secrets antes del despliegue..."
 	@make check-secrets-uat
 	@echo ""
 	@echo "¿Todos los secrets están OK? Si falta Grafana token, ejecuta 'make configure-grafana-uat' primero"
 	@echo "¿Continuar con el despliegue? (y/N)"
 	@read confirm && [ "$$confirm" = "y" ] || exit 1
-	@echo "🔄 Generando inventario dinámico para UAT..."
-	./scripts/deploy/uat/generate-inventory-uat.sh
-	@echo "📊 Desplegando monitoreo en UAT..."
-	cd ansible && ansible-playbook -i inventories/uat playbooks/site.yml --tags monitoring
+	@make deploy-monitoring-uat
 
 # Test de conectividad con Grafana Cloud
 test-grafana-connectivity-dev: ## Test conectividad Grafana Cloud DEV
@@ -364,30 +453,30 @@ test-grafana-connectivity-dev: ## Test conectividad Grafana Cloud DEV
 		--data "" \
 		"https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push" || echo "Test completado"
 
-# Setup completo de monitoreo
-setup-monitoring-dev: ## Setup completo de monitoreo para DEV
-	@echo "🚀 Setup completo de monitoreo para DEV"
-	@echo "======================================="
+# Setup completo de monitoreo (incluyendo Django metrics)
+setup-monitoring-dev: ## Setup completo de monitoreo + Django metrics para DEV
+	@echo "🚀 Setup completo de monitoreo + Django metrics para DEV"
+	@echo "========================================================"
 	@echo "1. Verificando secrets existentes..."
 	@make check-secrets-dev || true
 	@echo ""
 	@echo "2. ¿Necesitas configurar Grafana token? (y/N)"
 	@read need_grafana && [ "$$need_grafana" = "y" ] && make configure-grafana-dev || true
 	@echo ""
-	@echo "3. Desplegando monitoreo..."
-	@make deploy-monitoring-dev-complete
+	@echo "3. Desplegando monitoreo completo + Django metrics..."
+	@make deploy-monitoring-dev
 
-setup-monitoring-uat: ## Setup completo de monitoreo para UAT
-	@echo "🚀 Setup completo de monitoreo para UAT"
-	@echo "======================================="
+setup-monitoring-uat: ## Setup completo de monitoreo + Django metrics para UAT
+	@echo "🚀 Setup completo de monitoreo + Django metrics para UAT"
+	@echo "========================================================"
 	@echo "1. Verificando secrets existentes..."
 	@make check-secrets-uat || true
 	@echo ""
 	@echo "2. ¿Necesitas configurar Grafana token? (y/N)"
 	@read need_grafana && [ "$$need_grafana" = "y" ] && make configure-grafana-uat || true
 	@echo ""
-	@echo "3. Desplegando monitoreo..."
-	@make deploy-monitoring-uat-complete
+	@echo "3. Desplegando monitoreo completo + Django metrics..."
+	@make deploy-monitoring-uat
 
 # Troubleshooting
 debug-grafana-config-dev: ## Debug configuración Grafana DEV
@@ -401,12 +490,52 @@ debug-grafana-config-dev: ## Debug configuración Grafana DEV
 		echo "=== Configuración Grafana Agent ==="
 		sudo cat /etc/grafana-agent/grafana-agent.yml | head -20
 		echo ""
+		echo "=== Jobs Configurados ==="
+		sudo cat /etc/grafana-agent/grafana-agent.yml | grep -A 2 "job_name:"
+		echo ""
 		echo "=== Estado del Servicio ==="
 		sudo systemctl status grafana-agent
 		echo ""
 		echo "=== Últimos Logs ==="
 		sudo journalctl -u grafana-agent --since "5 minutes ago" --no-pager
-		echo ""
-		echo "=== Test de Configuración ==="
-		sudo /usr/local/bin/grafana-agent --config.file=/etc/grafana-agent/grafana-agent.yml --config.validate
 	REMOTE_SCRIPT
+
+debug-django-metrics-dev: ## Debug Django metrics DEV
+	@INSTANCE_IP=$$(cat .last-dev-ip 2>/dev/null || echo ""); \
+	if [ -z "$$INSTANCE_IP" ]; then \
+		echo "❌ No se pudo obtener IP de DEV"; \
+		exit 1; \
+	fi; \
+	echo "🔍 Debugging Django metrics en DEV ($$INSTANCE_IP)"; \
+	ssh zentravision@$$INSTANCE_IP 'bash -s' << 'REMOTE_SCRIPT'
+		echo "=== Django Metrics Test ==="
+		curl -v http://localhost:8000/metrics/ || echo "Error en endpoint"
+		echo ""
+		echo "=== Django URLs Configuration ==="
+		find /opt/zentravision/app -name "urls.py" -exec grep -l "metrics" {} \; | head -2
+		echo ""
+		echo "=== Metrics Views File ==="
+		ls -la /opt/zentravision/app/metrics_views.py 2>/dev/null || echo "metrics_views.py no encontrado"
+		echo ""
+		echo "=== Django Processes ==="
+		ps aux | grep python | grep zentravision | grep -v grep
+		echo ""
+		echo "=== Django Service Status ==="
+		sudo systemctl status gunicorn 2>/dev/null || sudo supervisorctl status 2>/dev/null || echo "No service found"
+	REMOTE_SCRIPT
+
+# Resumen de estado completo
+status-monitoring-dev: ## Status completo del monitoreo DEV
+	@echo "📊 Estado Completo del Monitoreo - DEV"
+	@echo "======================================"
+	@echo "1. Secrets:"
+	@make check-secrets-dev
+	@echo ""
+	@echo "2. Servicios:"
+	@make check-monitoring
+	@echo ""
+	@echo "3. Django Metrics:"
+	@make test-django-metrics-dev
+	@echo ""
+	@echo "4. Grafana Cloud:"
+	@make test-grafana-connectivity-dev

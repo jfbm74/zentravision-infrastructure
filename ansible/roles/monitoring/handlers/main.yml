@@ -1,30 +1,82 @@
 ---
-- name: restart node_exporter
-  systemd:
-    name: node_exporter
-    state: restarted
+# ============================================================================
+# HANDLERS CORREGIDOS: ansible/roles/monitoring/handlers/main.yml
+# Agregando handler faltante para systemd reload
+# ============================================================================
 
 - name: restart postgres_exporter
   systemd:
     name: postgres_exporter
     state: restarted
+    daemon_reload: yes
+  listen: "restart postgres_exporter"
+
+- name: reload postgres_exporter
+  systemd:
+    name: postgres_exporter
+    state: reloaded
+  listen: "reload postgres_exporter"
 
 - name: restart redis_exporter
   systemd:
     name: redis_exporter
     state: restarted
+    daemon_reload: yes
+  listen: "restart redis_exporter"
+
+- name: reload redis_exporter
+  systemd:
+    name: redis_exporter
+    state: reloaded
+  listen: "reload redis_exporter"
 
 - name: restart nginx_exporter
   systemd:
     name: nginx_exporter
     state: restarted
+    daemon_reload: yes
+  listen: "restart nginx_exporter"
 
-- name: restart grafana-agent
+- name: reload nginx_exporter
   systemd:
-    name: grafana-agent
-    state: restarted
+    name: nginx_exporter
+    state: reloaded
+  listen: "reload nginx_exporter"
 
 - name: restart nginx
   systemd:
     name: nginx
     state: restarted
+  listen: "restart nginx"
+
+- name: reload nginx
+  systemd:
+    name: nginx
+    state: reloaded
+  listen: "reload nginx"
+
+# ============================================================================
+# HANDLERS DE GRAFANA AGENT (CORREGIDOS)
+# ============================================================================
+
+- name: restart grafana-agent
+  systemd:
+    name: grafana-agent
+    state: restarted
+    daemon_reload: yes
+  listen: "restart grafana-agent"
+
+- name: reload grafana-agent
+  systemd:
+    name: grafana-agent
+    state: reloaded
+  listen: "reload grafana-agent"
+
+# ============================================================================
+# HANDLER FALTANTE: SYSTEMD RELOAD
+# ============================================================================
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  listen: "reload systemd"

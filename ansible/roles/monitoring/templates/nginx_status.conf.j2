@@ -1,0 +1,25 @@
+# Nginx status endpoint configuration
+# This should be included in your main nginx server block
+
+location /nginx_status {
+    stub_status on;
+    access_log off;
+    
+    # Allow access only from localhost and monitoring systems
+    allow 127.0.0.1;
+    allow ::1;
+    {% if monitoring_allowed_ips is defined %}
+    {% for ip in monitoring_allowed_ips %}
+    allow {{ ip }};
+    {% endfor %}
+    {% endif %}
+    
+    # Deny all other access
+    deny all;
+    
+    # Optional: Add basic auth for additional security
+    {% if nginx_status_auth_enabled | default(false) %}
+    auth_basic "Nginx Status";
+    auth_basic_user_file /etc/nginx/.htpasswd_status;
+    {% endif %}
+}
