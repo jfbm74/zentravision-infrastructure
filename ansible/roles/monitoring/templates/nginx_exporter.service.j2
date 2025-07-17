@@ -1,0 +1,26 @@
+[Unit]
+Description=Prometheus Nginx Exporter
+Documentation=https://github.com/nginxinc/nginx-prometheus-exporter
+After=network.target nginx.service
+Requires=network.target
+
+[Service]
+Type=simple
+User={{ nginx_exporter_user }}
+Group={{ nginx_exporter_user }}
+ExecStart=/usr/local/bin/nginx_exporter --nginx.scrape-uri=http://localhost/nginx_status --web.listen-address=:{{ nginx_exporter_port }}
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/{{ nginx_exporter_user }}
+
+[Install]
+WantedBy=multi-user.target

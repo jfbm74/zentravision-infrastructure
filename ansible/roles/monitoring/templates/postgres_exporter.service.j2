@@ -1,0 +1,27 @@
+[Unit]
+Description=Prometheus PostgreSQL Exporter
+Documentation=https://github.com/prometheus-community/postgres_exporter
+After=network.target postgresql.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=postgres_exporter
+Group=postgres_exporter
+EnvironmentFile=/etc/default/postgres_exporter
+ExecStart=/usr/local/bin/postgres_exporter
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/postgres_exporter
+
+[Install]
+WantedBy=multi-user.target

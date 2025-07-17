@@ -8,13 +8,154 @@ grafana_cloud_password: "{{ vault_grafana_password }}"
 monitoring_enabled: true
 grafana_agent_version: "v0.38.1"
 scrape_interval: "15s"
+evaluation_interval: "15s"
 
 # Exporter versions
 node_exporter_version: "1.7.0"
 node_exporter_port: 9100
+
 postgres_exporter_version: "0.15.0"
 postgres_exporter_port: 9187
+
 redis_exporter_version: "1.55.0"
 redis_exporter_port: 9121
+
 nginx_exporter_version: "0.11.0"
 nginx_exporter_port: 9113
+
+# Grafana Agent configuration
+grafana_agent_port: 12345
+grafana_agent_config_dir: "/etc/grafana-agent"
+grafana_agent_data_dir: "/var/lib/grafana-agent"
+grafana_agent_log_level: "info"
+
+# PostgreSQL Exporter configuration
+postgres_exporter_user: "postgres_exporter"
+postgres_exporter_password: "{{ vault_postgres_exporter_password | default('change_this_password') }}"
+postgres_exporter_database: "postgres"
+postgres_exporter_auto_discover: true
+postgres_exporter_exclude_databases: "template0,template1"
+postgres_exporter_query_timeout: 10
+postgres_exporter_data_source_name: "postgresql://{{ postgres_exporter_user }}:{{ postgres_exporter_password }}@localhost:5432/{{ postgres_exporter_database }}?sslmode=disable"
+
+# Redis Exporter configuration
+redis_exporter_user: "redis_exporter"
+redis_addr: "redis://localhost:6379"
+redis_password: "{{ vault_redis_password | default('') }}"
+redis_check_keys: ""
+redis_check_single_keys: ""
+redis_check_key_groups: ""
+
+# Nginx Exporter configuration
+nginx_exporter_user: "nginx_exporter"
+nginx_scrape_uri: "http://localhost/nginx_status"
+nginx_timeout: "5s"
+nginx_retry_count: 3
+nginx_retry_interval: "1s"
+nginx_config_path: "/etc/nginx/sites-available/default"
+nginx_status_auth_enabled: false
+
+# Node Exporter configuration
+node_exporter_user: "node_exporter"
+node_exporter_enabled_collectors:
+  - systemd
+  - meminfo
+  - diskstats
+  - filesystem
+  - netdev
+  - loadavg
+  - time
+node_exporter_disabled_collectors:
+  - mdadm
+
+# Enable/disable exporters
+enable_node_exporter: true
+enable_postgres_exporter: true
+enable_redis_exporter: true
+enable_nginx_exporter: true
+enable_grafana_agent: true
+
+# Installation paths
+exporter_install_path: "/usr/local/bin"
+exporter_config_path: "/etc"
+exporter_data_path: "/var/lib"
+exporter_log_path: "/var/log"
+
+# System users and groups
+monitoring_group: "monitoring"
+create_monitoring_users: true
+
+# Security settings
+monitoring_allowed_ips: []
+# Example:
+# monitoring_allowed_ips:
+#   - "10.0.0.0/8"
+#   - "172.16.0.0/12"
+#   - "192.168.0.0/16"
+
+# Firewall settings
+configure_firewall: false
+firewall_rules:
+  - port: "{{ node_exporter_port }}"
+    source: "{{ monitoring_allowed_ips }}"
+  - port: "{{ postgres_exporter_port }}"
+    source: "{{ monitoring_allowed_ips }}"
+  - port: "{{ redis_exporter_port }}"
+    source: "{{ monitoring_allowed_ips }}"
+  - port: "{{ nginx_exporter_port }}"
+    source: "{{ monitoring_allowed_ips }}"
+
+# Download URLs (automatically constructed)
+node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+postgres_exporter_url: "https://github.com/prometheus-community/postgres_exporter/releases/download/v{{ postgres_exporter_version }}/postgres_exporter-{{ postgres_exporter_version }}.linux-amd64.tar.gz"
+redis_exporter_url: "https://github.com/oliver006/redis_exporter/releases/download/v{{ redis_exporter_version }}/redis_exporter-v{{ redis_exporter_version }}.linux-amd64.tar.gz"
+nginx_exporter_url: "https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v{{ nginx_exporter_version }}/nginx-prometheus-exporter_{{ nginx_exporter_version }}_linux_amd64.tar.gz"
+grafana_agent_url: "https://github.com/grafana/agent/releases/download/{{ grafana_agent_version }}/grafana-agent-linux-amd64.zip"
+
+# Backup and maintenance
+backup_enabled: false
+backup_retention_days: 30
+log_rotation_enabled: true
+log_max_size: "100M"
+log_max_files: 5
+
+# Alerting (if using local alertmanager)
+alerting_enabled: false
+alertmanager_url: ""
+
+# Custom metrics and labels
+custom_labels:
+  environment: "{{ ansible_environment | default('production') }}"
+  project: "zentravision"
+  region: "{{ ansible_region | default('us-central1') }}"
+
+# Django application metrics (if django-prometheus is configured)
+django_metrics_enabled: false
+django_metrics_port: 8001
+django_metrics_path: "/metrics"
+
+# Additional scrape configs for application-specific metrics
+additional_scrape_configs: []
+# Example:
+# additional_scrape_configs:
+#   - job_name: 'django-app'
+#     static_configs:
+#       - targets: ['localhost:8000']
+#     metrics_path: '/metrics'
+#     scrape_interval: 30s
+
+# Retention and storage
+metrics_retention: "15d"
+metrics_storage_path: "/var/lib/grafana-agent/data"
+
+# Performance tuning
+max_samples_per_send: 1000
+batch_send_deadline: "5s"
+min_shards: 1
+max_shards: 10
+capacity: 10000
+
+# Health check settings
+health_check_enabled: true
+health_check_interval: "30s"
+health_check_timeout: "10s"
